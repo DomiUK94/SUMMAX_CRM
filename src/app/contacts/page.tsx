@@ -1,85 +1,88 @@
-import { revalidatePath } from "next/cache";
-import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { requireUser } from "@/lib/auth/session";
-import { createContact, listContacts, listInvestors } from "@/lib/db/crm";
+import { listContacts } from "@/lib/db/crm";
 
 export default async function ContactsPage() {
   const user = await requireUser();
-  const [contacts, investors] = await Promise.all([listContacts(), listInvestors()]);
-
-  async function createContactAction(formData: FormData) {
-    "use server";
-    const actor = await requireUser();
-    const investor_id = String(formData.get("investor_id") ?? "");
-    const full_name = String(formData.get("full_name") ?? "").trim();
-    const email = String(formData.get("email") ?? "").trim();
-    const phone = String(formData.get("phone") ?? "").trim();
-    if (!investor_id || !full_name) return;
-
-    await createContact({
-      investor_id,
-      full_name,
-      email: email || undefined,
-      phone: phone || undefined,
-      owner_user_id: actor.id
-    });
-
-    revalidatePath("/contacts");
-    revalidatePath("/dashboard/me");
-  }
+  const contacts = await listContacts();
 
   return (
-    <AppShell title="Contactos" subtitle="Gestion y alta manual" canViewGlobal={user.can_view_global_dashboard}>
-      <div className="stack">
-        <div className="card">
-          <h3>Nuevo contacto</h3>
-          <form action={createContactAction} className="row" style={{ alignItems: "end" }}>
-            <div>
-              <label>Fondo</label>
-              <select name="investor_id" required defaultValue="">
-                <option value="" disabled>Selecciona fondo...</option>
-                {investors.map((inv) => (
-                  <option key={inv.id} value={inv.id}>{inv.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label>Nombre</label>
-              <input name="full_name" required />
-            </div>
-            <div>
-              <label>Email</label>
-              <input type="email" name="email" />
-            </div>
-            <div>
-              <label>Telefono</label>
-              <input name="phone" />
-            </div>
-            <button type="submit">Crear</button>
-          </form>
+    <AppShell title="Contactos" subtitle="Vista CRM" canViewGlobal={user.can_view_global_dashboard}>
+      <div className="contacts-shell">
+        <div className="contacts-top-tabs">
+          <button className="contacts-select">Contacts ▾</button>
+          <button className="contacts-tab contacts-tab-active">All contacts <span className="contacts-badge">{contacts.length}</span></button>
+          <button className="contacts-tab">Open opportunities</button>
+          <button className="contacts-tab">Need follow up</button>
+          <button className="contacts-tab">In progress</button>
+          <button className="contacts-plus">+</button>
+          <button className="contacts-add">Add contacts ▾</button>
         </div>
 
-        <div className="card">
-          <h3>Listado</h3>
-          <table>
-            <thead>
-              <tr><th>Nombre</th><th>Fondo</th><th>Estado</th><th>Email</th><th>Vence</th><th></th></tr>
-            </thead>
-            <tbody>
-              {contacts.map((c) => (
-                <tr key={c.id}>
-                  <td>{c.full_name}</td>
-                  <td>{c.investor_name ?? "-"}</td>
-                  <td>{c.status_name ?? "-"}</td>
-                  <td>{c.email ?? "-"}</td>
-                  <td>{c.due_date ?? "-"}</td>
-                  <td><Link href={`/contacts/${c.id}`}>Detalle</Link></td>
+        <div className="contacts-toolbar card">
+          <div className="contacts-toolbar-row">
+            <input className="contacts-search" placeholder="Search" />
+            <div className="contacts-actions">
+              <button>Table view ▾</button>
+              <button>Edit columns</button>
+              <button>Filters</button>
+              <button>Sort</button>
+              <button>Export</button>
+              <button>Save</button>
+            </div>
+          </div>
+
+          <div className="contacts-filters-row">
+            <button className="contacts-filter-chip">Contact owner ▾</button>
+            <button className="contacts-filter-chip">Create date ▾</button>
+            <button className="contacts-filter-chip">Last activity date ▾</button>
+            <button className="contacts-filter-chip">Lead status ▾</button>
+            <button className="contacts-filter-chip">+ More</button>
+            <button className="contacts-filter-chip">Advanced filters</button>
+          </div>
+
+          <div className="contacts-table-wrap">
+            <table className="contacts-crm-table">
+              <thead>
+                <tr>
+                  <th><input type="checkbox" /></th>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Phone Number</th>
+                  <th>Company Name</th>
+                  <th>Lead Status</th>
+                  <th>Lifecycle Stage</th>
+                  <th>Buying Role</th>
                 </tr>
-              ))}
-              {contacts.length === 0 ? <tr><td colSpan={6}>Sin contactos.</td></tr> : null}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {contacts.map((c) => (
+                  <tr key={c.id}>
+                    <td><input type="checkbox" /></td>
+                    <td>{c.full_name}</td>
+                    <td>{c.email ?? "--"}</td>
+                    <td>{c.phone ?? "--"}</td>
+                    <td>{c.investor_name ?? "--"}</td>
+                    <td>{c.status_name ?? "--"}</td>
+                    <td>{c.status_name ? "Opportunity" : "--"}</td>
+                    <td>--</td>
+                  </tr>
+                ))}
+                {contacts.length === 0 ? (
+                  <tr>
+                    <td colSpan={8}>Sin contactos.</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="contacts-pagination">
+            <button>Prev</button>
+            <span className="contacts-page-current">1</span>
+            <button>Next</button>
+            <span>25 per page ▾</span>
+          </div>
         </div>
       </div>
     </AppShell>

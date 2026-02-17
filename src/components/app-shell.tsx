@@ -17,11 +17,20 @@ export function AppShell({
   children: React.ReactNode;
   canViewGlobal: boolean;
 }) {
-  const nav: NavItem[] = [
+  const coreNav: NavItem[] = [
     { href: "/dashboard/me", label: "Mi Dashboard" },
-    { href: "/dashboard/general", label: "Dashboard General", visible: canViewGlobal },
-    { href: "/investors", label: "Fondos" },
+    { href: "/dashboard/general", label: "Dashboard General", visible: canViewGlobal }
+  ];
+
+  const crmNav: NavItem[] = [
     { href: "/contacts", label: "Contactos" },
+    { href: "/investors", label: "Cuentas" },
+    { href: "/acuerdos", label: "Acuerdos" },
+    { href: "/actividades", label: "Actividades" },
+    { href: "/reporte-financiacion", label: "Reporte financiación" }
+  ];
+
+  const opsNav: NavItem[] = [
     { href: "/imports", label: "Importaciones" },
     { href: "/exports", label: "Exportaciones" },
     { href: "/admin/users", label: "Usuarios" }
@@ -32,7 +41,26 @@ export function AppShell({
       <aside className="sidebar">
         <h2>SUMMAX CRM</h2>
         <nav>
-          {nav
+          {coreNav
+            .filter((item) => item.visible ?? true)
+            .map((item) => (
+              <Link key={item.href} href={item.href} className="nav-link">
+                {item.label}
+              </Link>
+            ))}
+
+          <div className="nav-section-title">CRM</div>
+          <div className="nav-submenu">
+            {crmNav
+              .filter((item) => item.visible ?? true)
+              .map((item) => (
+                <Link key={item.href} href={item.href} className="nav-link">
+                  {item.label}
+                </Link>
+              ))}
+          </div>
+
+          {opsNav
             .filter((item) => item.visible ?? true)
             .map((item) => (
               <Link key={item.href} href={item.href} className="nav-link">
