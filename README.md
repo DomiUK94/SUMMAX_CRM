@@ -24,9 +24,16 @@ CRM interno para gestion de fondos/inversores y contactos.
 4. Aplica migraciones SQL:
    - `supabase/migrations/20260212_phase1_auth.sql`
    - `supabase/migrations/20260212_phase2_core.sql`
+   - `supabase/migrations/20260217_phase3_sourcecrm_restructure.sql`
 5. Arranca desarrollo con `npm run dev`.
 
 ## Notas
 - El primer usuario que haga login se promueve automaticamente a `admin` y obtiene acceso al dashboard general.
 - Si no hay sesion, las rutas protegidas redirigen a `/login`.
+- Scripts SQL auxiliares:
+  - `supabase/scripts/sourcecrm_truncate.sql`
+  - `supabase/scripts/drop_legacy_investors_contacts.sql`
+  - `supabase/scripts/load_sourcecrm_from_excel.sql` (generado por script Python)
+- Carga desde Excel `260217 Mapping SUMMAX.xlsx`:
+  - `python scripts/load_sourcecrm_from_excel.py "260217 Mapping SUMMAX.xlsx" --truncate-first`
 

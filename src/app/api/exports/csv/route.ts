@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
 function toCsv(rows: Record<string, unknown>[]): string {
   if (rows.length === 0) return "";
@@ -21,6 +22,7 @@ function toCsv(rows: Record<string, unknown>[]): string {
 
 export async function GET(request: Request) {
   const supabase = createSupabaseServerClient();
+  const sourceCrm = createSourceCrmServerClient();
   const {
     data: { user }
   } = await supabase.auth.getUser();
@@ -33,9 +35,9 @@ export async function GET(request: Request) {
   const mode = url.searchParams.get("mode") === "detail" ? "detail" : "general";
 
   if (mode === "detail") {
-    const { data } = await supabase
-      .from("contacts")
-      .select("full_name, email, phone, status_name, next_step, due_date, investor_name, owner_email, updated_at")
+    const { data } = await sourceCrm
+      .from("contactos")
+      .select("contact_id, company_id, compania, persona_contacto, rol, email, telefono, linkedin, comentarios, prioritario, updated_at")
       .order("updated_at", { ascending: false })
       .limit(20000);
 
@@ -48,9 +50,9 @@ export async function GET(request: Request) {
     });
   }
 
-  const { data } = await supabase
-    .from("investors")
-    .select("name, category, status_name, website, sector, strategy, updated_at")
+  const { data } = await sourceCrm
+    .from("inversion")
+    .select("company_id, vertical, compania, direccion, estrategia, linkedin, web, portfolio, comentarios, encaje_summax, motivo, inversion_minima, inversion_maxima, prioridad, sede, tamano_empresa, updated_at")
     .order("updated_at", { ascending: false })
     .limit(20000);
 
