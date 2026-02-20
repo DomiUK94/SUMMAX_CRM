@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 import type { AppUser, AppRole } from "@/lib/auth/permissions";
 
 export async function getCurrentUser(): Promise<AppUser | null> {
@@ -10,22 +11,14 @@ export async function getCurrentUser(): Promise<AppUser | null> {
 
   if (!user) return null;
 
-  const { data: profile } = await supabase
+  const sourcecrm = createSourceCrmServerClient();
+  const { data: profile } = await sourcecrm
     .from("users")
     .select("id, email, role, can_view_global_dashboard, is_active")
     .eq("id", user.id)
     .maybeSingle();
 
-  if (!profile) {
-    const fallback: AppUser = {
-      id: user.id,
-      email: user.email ?? "",
-      role: "user",
-      can_view_global_dashboard: false,
-      is_active: true
-    };
-    return fallback;
-  }
+  if (!profile) return null;
 
   return {
     id: profile.id,

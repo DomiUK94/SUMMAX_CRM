@@ -1,9 +1,12 @@
 import { redirect } from "next/navigation";
+import Image from "next/image";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
 type SearchProps = {
   searchParams?: {
     error?: string;
+    reason?: string;
     next?: string;
   };
 };
@@ -17,28 +20,68 @@ export default function LoginPage({ searchParams }: SearchProps) {
     const next = String(formData.get("next") ?? "/dashboard/me");
 
     const supabase = createSupabaseServerClient();
+    const sourcecrm = createSourceCrmServerClient();
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error || !data.user) {
       redirect("/login?error=invalid_credentials");
     }
 
-    const { count: usersCount } = await supabase.from("users").select("id", { count: "exact", head: true });
+    const { count: usersCount } = await sourcecrm.from("users").select("id", { count: "exact", head: true });
     const isFirstUser = (usersCount ?? 0) === 0;
+    let profileError: { code?: string; message?: string; details?: string | null; hint?: string | null } | null = null;
 
-    const { error: profileError } = await supabase.from("users").upsert(
-      {
-        id: data.user.id,
-        email: data.user.email ?? email,
-        role: isFirstUser ? "admin" : "user",
-        can_view_global_dashboard: isFirstUser,
-        is_active: true,
-        updated_at: new Date().toISOString()
-      },
-      { onConflict: "id" }
-    );
+    if (isFirstUser) {
+      const result = await sourcecrm.from("users").upsert(
+        {
+          id: data.user.id,
+          email: data.user.email ?? email,
+          role: "admin",
+          can_view_global_dashboard: true,
+          is_active: true,
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: "id" }
+      );
+      profileError = result.error;
+    } else {
+      const { data: profile, error: readProfileError } = await sourcecrm
+        .from("users")
+        .select("id, is_active")
+        .eq("id", data.user.id)
+        .maybeSingle();
+      profileError = readProfileError;
+      if (!profile) {
+        redirect("/login?error=forbidden&reason=not_in_crm_users");
+      }
+      if (!profile.is_active) {
+        redirect("/login?error=forbidden&reason=user_inactive");
+      }
+      await sourcecrm
+        .from("users")
+        .update({
+          email: data.user.email ?? email,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", data.user.id);
+    }
 
     if (profileError) {
-      redirect("/login?error=profile_sync_failed");
+      console.error("profile_sync_failed", {
+        code: profileError.code,
+        message: profileError.message,
+        details: profileError.details,
+        hint: profileError.hint
+      });
+      const reasonRaw = [
+        profileError.code,
+        profileError.message,
+        profileError.details,
+        profileError.hint
+      ]
+        .filter(Boolean)
+        .join(" | ");
+      const reason = encodeURIComponent(reasonRaw || "unknown");
+      redirect(`/login?error=profile_sync_failed&reason=${reason}`);
     }
 
     redirect(next.startsWith("/") ? next : "/dashboard/me");
@@ -47,9 +90,17 @@ export default function LoginPage({ searchParams }: SearchProps) {
   return (
     <main>
       <div className="card" style={{ maxWidth: 420, margin: "48px auto" }}>
+        <div className="login-logo-wrap">
+          <Image src="/SUMMAX_CRM_Logo.png" alt="SUMMAX CRM" width={220} height={56} className="login-logo" priority />
+        </div>
         <h1>Login</h1>
         <p>Acceso por email y password.</p>
-        {searchParams?.error ? <p style={{ color: "#b91c1c" }}>Error: {searchParams.error}</p> : null}
+        {searchParams?.error ? (
+          <p style={{ color: "#b91c1c" }}>
+            Error: {searchParams.error}
+            {searchParams.reason ? ` (${searchParams.reason})` : ""}
+          </p>
+        ) : null}
         <form action={login}>
           <input type="hidden" name="next" value={searchParams?.next ?? "/dashboard/me"} />
           <label>Email</label>

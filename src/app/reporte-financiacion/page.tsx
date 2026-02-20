@@ -29,7 +29,7 @@ export default async function ReporteFinanciacionPage() {
   const totalMax = rows.reduce((acc, r) => acc + r.max_num, 0);
 
   return (
-    <AppShell title="Reporte financiación" subtitle="Resumen económico de acuerdos por cuenta" canViewGlobal={user.can_view_global_dashboard}>
+    <AppShell title="Reporte financiacion" subtitle="Resumen economico de negocios por cuenta" canViewGlobal={user.can_view_global_dashboard}>
       <div className="stats-grid">
         <div className="card">
           <strong>{rows.length}</strong>
@@ -37,11 +37,11 @@ export default async function ReporteFinanciacionPage() {
         </div>
         <div className="card">
           <strong>{totalMin.toLocaleString("es-ES")}</strong>
-          <div className="muted">Suma inversión mínima</div>
+          <div className="muted">Suma inversion minima</div>
         </div>
         <div className="card">
           <strong>{totalMax.toLocaleString("es-ES")}</strong>
-          <div className="muted">Suma inversión máxima</div>
+          <div className="muted">Suma inversion maxima</div>
         </div>
         <div className="card">
           <strong>{(totalMax - totalMin).toLocaleString("es-ES")}</strong>
@@ -57,8 +57,8 @@ export default async function ReporteFinanciacionPage() {
               <th>Cuenta</th>
               <th>Vertical</th>
               <th>Prioridad</th>
-              <th>Inversión mínima</th>
-              <th>Inversión máxima</th>
+              <th>Inversion minima</th>
+              <th>Inversion maxima</th>
             </tr>
           </thead>
           <tbody>
@@ -74,7 +74,7 @@ export default async function ReporteFinanciacionPage() {
             ))}
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={6}>Sin datos de financiación.</td>
+                <td colSpan={6}>Sin datos de financiacion.</td>
               </tr>
             ) : null}
           </tbody>

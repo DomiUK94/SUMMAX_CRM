@@ -1,85 +1,82 @@
-import { AppShell } from "@/components/app-shell";
+﻿import { AppShell } from "@/components/app-shell";
+import { InvestorsTable } from "@/components/investors-table";
+import { RowsPerPageSelect } from "@/components/rows-per-page-select";
 import { requireUser } from "@/lib/auth/session";
-import { listInvestors } from "@/lib/db/crm";
+import { normalizePerPage } from "@/lib/ui/pagination";
+import Link from "next/link";
+import { listInvestorsPage } from "@/lib/db/crm";
 
-export default async function InvestorsPage() {
+function normalizePage(value: string | undefined): number {
+  const parsed = Number(value ?? "1");
+  if (!Number.isFinite(parsed) || parsed < 1) return 1;
+  return Math.trunc(parsed);
+}
+
+function hrefFor(page: number, perPage: number): string {
+  return `/investors?page=${page}&per_page=${perPage}`;
+}
+
+export default async function InvestorsPage({
+  searchParams
+}: {
+  searchParams?: { page?: string; per_page?: string };
+}) {
   const user = await requireUser();
-  const investors = await listInvestors();
+  const requestedPage = normalizePage(searchParams?.page);
+  const perPage = normalizePerPage(searchParams?.per_page);
+
+  let { rows: investors, totalCount } = await listInvestorsPage({
+    page: requestedPage,
+    pageSize: perPage
+  });
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
+  const currentPage = Math.min(requestedPage, totalPages);
+
+  if (requestedPage !== currentPage) {
+    const fallback = await listInvestorsPage({
+      page: currentPage,
+      pageSize: perPage
+    });
+    investors = fallback.rows;
+    totalCount = fallback.totalCount;
+  }
+
+  const hasPrev = currentPage > 1;
+  const hasNext = currentPage < totalPages;
 
   return (
     <AppShell title="Cuentas" subtitle="Vista CRM" canViewGlobal={user.can_view_global_dashboard}>
       <div className="companies-shell">
         <div className="companies-top-tabs">
-          <button className="companies-select">Companies ▾</button>
-          <button className="companies-tab companies-tab-active">All companies <span className="companies-badge">{investors.length}</span></button>
-          <button className="companies-tab">My companies</button>
-          <button className="companies-plus">+</button>
-          <button className="companies-add">Add companies ▾</button>
+          <button className="companies-tab companies-tab-active">
+            Todas las cuentas <span className="companies-badge">{totalCount}</span>
+          </button>
+          <Link href="/investors/manage" className="companies-edit">
+            Modificar datos cuentas
+          </Link>
+          <button className="companies-add">Añadir</button>
         </div>
-
         <div className="companies-toolbar card">
-          <div className="companies-toolbar-row">
-            <input className="companies-search" placeholder="Search" />
-            <div className="companies-actions">
-              <button>Table view ▾</button>
-              <button>Edit columns</button>
-              <button>Filters</button>
-              <button>Sort</button>
-              <button>Export</button>
-              <button>Save</button>
-            </div>
-          </div>
-
-          <div className="companies-filters-row">
-            <button className="companies-filter-chip">Company owner ▾</button>
-            <button className="companies-filter-chip">Create date ▾</button>
-            <button className="companies-filter-chip">Last activity date ▾</button>
-            <button className="companies-filter-chip">Lead status ▾</button>
-            <button className="companies-filter-chip">+ More</button>
-            <button className="companies-filter-chip">Advanced filters</button>
-          </div>
-
-          <div className="companies-table-wrap">
-            <table className="companies-crm-table">
-              <thead>
-                <tr>
-                  <th><input type="checkbox" /></th>
-                  <th>Company name</th>
-                  <th>Company owner</th>
-                  <th>Create Date (GMT+1)</th>
-                  <th>Phone Number</th>
-                  <th>Last Activity Date (GMT+1)</th>
-                  <th>City</th>
-                  <th>Country/Region</th>
-                </tr>
-              </thead>
-              <tbody>
-                {investors.map((inv) => (
-                  <tr key={inv.id}>
-                    <td><input type="checkbox" /></td>
-                    <td>{inv.name}</td>
-                    <td>No owner</td>
-                    <td>--</td>
-                    <td>--</td>
-                    <td>--</td>
-                    <td>{inv.category ?? "--"}</td>
-                    <td>{inv.website ?? "--"}</td>
-                  </tr>
-                ))}
-                {investors.length === 0 ? (
-                  <tr>
-                    <td colSpan={8}>Sin cuentas.</td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </div>
+          <InvestorsTable investors={investors} storageKeyPrefix={`user:${user.id}:investors`} />
 
           <div className="companies-pagination">
-            <button>Prev</button>
-            <span className="companies-page-current">1</span>
-            <button>Next</button>
-            <span>25 per page ▾</span>
+            {hasPrev ? (
+              <Link href={hrefFor(currentPage - 1, perPage)} className="companies-tab">
+                Anterior
+              </Link>
+            ) : (
+              <button disabled>Anterior</button>
+            )}
+            <span className="companies-page-current">{currentPage}</span>
+            {hasNext ? (
+              <Link href={hrefFor(currentPage + 1, perPage)} className="companies-tab">
+                Siguiente
+              </Link>
+            ) : (
+              <button disabled>Siguiente</button>
+            )}
+            <RowsPerPageSelect value={perPage} storageKey={`user:${user.id}:investors:per_page`} />
           </div>
         </div>
       </div>

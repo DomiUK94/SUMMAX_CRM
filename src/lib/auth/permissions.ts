@@ -17,3 +17,13 @@ export function canManageUsers(user: AppUser | null): boolean {
   if (!user) return false;
   return user.is_active && user.role === "admin";
 }
+
+export function canManageCrmBulkEdits(user: AppUser | null): boolean {
+  if (!user) return false;
+  return user.is_active && (user.role === "admin" || user.role === "manager");
+}
+
+export function canAccessUsersProvisioning(user: AppUser | null): boolean {
+  if (!user) return false;
+  return user.is_active && (user.role === "admin" || user.role === "manager");
+}
