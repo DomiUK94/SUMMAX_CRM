@@ -15,6 +15,8 @@ type NavItem = {
 type NavGroup = {
   title: string;
   items: NavItem[];
+  collapsible?: boolean;
+  defaultOpen?: boolean;
 };
 
 function renderNavGroups(groups: NavGroup[]) {
@@ -22,19 +24,32 @@ function renderNavGroups(groups: NavGroup[]) {
     const items = group.items.filter((item) => item.visible ?? true);
     if (items.length === 0) return null;
 
+    const content = (
+      <div className="nav-submenu">
+        {items.map((item) => (
+          <Link key={item.href} href={item.href} className="nav-link">
+            <span className="nav-link-icon" aria-hidden="true">
+              <CrmIcon name={item.icon} className="crm-icon" />
+            </span>
+            <span>{item.label}</span>
+          </Link>
+        ))}
+      </div>
+    );
+
+    if (group.collapsible) {
+      return (
+        <details key={group.title} className="nav-group nav-group-collapsible" open={group.defaultOpen}>
+          <summary className="nav-section-title nav-section-toggle">{group.title}</summary>
+          {content}
+        </details>
+      );
+    }
+
     return (
       <div key={group.title} className="nav-group">
         <div className="nav-section-title">{group.title}</div>
-        <div className="nav-submenu">
-          {items.map((item) => (
-            <Link key={item.href} href={item.href} className="nav-link">
-              <span className="nav-link-icon" aria-hidden="true">
-                <CrmIcon name={item.icon} className="crm-icon" />
-              </span>
-              <span>{item.label}</span>
-            </Link>
-          ))}
-        </div>
+        {content}
       </div>
     );
   });
@@ -65,14 +80,11 @@ export async function AppShell({
 
   const navGroups: NavGroup[] = [
     {
-      title: "Dashboards",
-      items: [
-        { href: "/dashboard/me", label: "Mi dashboard", icon: "dashboard" },
-        { href: "/dashboard/general", label: "Dashboard general", icon: "overview", visible: canViewGlobal }
-      ]
+      title: "Inicio",
+      items: [{ href: "/dashboard/me", label: "Mi dashboard", icon: "dashboard" }]
     },
     {
-      title: "CRM",
+      title: "Operativa",
       items: [
         { href: "/search", label: "Búsqueda global", icon: "search" },
         { href: "/contacts", label: "Contactos", icon: "contacts" },
@@ -83,6 +95,8 @@ export async function AppShell({
     },
     {
       title: "Configuración",
+      collapsible: true,
+      defaultOpen: false,
       items: [
         { href: "/imports", label: "Importaciones", icon: "imports", visible: isAdmin },
         { href: "/exports", label: "Exportaciones", icon: "exports", visible: isAdmin },
@@ -94,7 +108,12 @@ export async function AppShell({
     },
     {
       title: "Analítica",
-      items: [{ href: "/reporte-financiacion", label: "Reporte financiación", icon: "report" }]
+      collapsible: true,
+      defaultOpen: false,
+      items: [
+        { href: "/dashboard/general", label: "Dashboard general", icon: "overview", visible: canViewGlobal },
+        { href: "/reporte-financiacion", label: "Reporte financiación", icon: "report", visible: canViewGlobal }
+      ]
     }
   ];
 
@@ -103,7 +122,7 @@ export async function AppShell({
       <aside className="sidebar">
         <div className="sidebar-brand-wrap">
           <div className="sidebar-brand">
-            <Image src="/SUMMAX_CRM_Logo.png" alt="SUMMAX CRM" width={164} height={52} className="sidebar-logo" priority />
+            <Image src="/SUMMAX_CRM_Logo.png" alt="SUMMAX CRM" width={136} height={44} className="sidebar-logo" priority />
           </div>
         </div>
 
@@ -118,12 +137,6 @@ export async function AppShell({
 
         <header className="workspace-header card">
           <div className="workspace-header-copy">
-            <p className="workspace-kicker">
-              <span className="workspace-kicker-icon" aria-hidden="true">
-                <CrmIcon name="spark" className="crm-icon" />
-              </span>
-              <span>Workspace</span>
-            </p>
             <h1>{title}</h1>
             {subtitle ? <p className="muted">{subtitle}</p> : null}
           </div>
@@ -136,3 +149,4 @@ export async function AppShell({
     </div>
   );
 }
+

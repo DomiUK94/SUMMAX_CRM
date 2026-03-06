@@ -1,8 +1,10 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
+import * as Dialog from "@radix-ui/react-dialog";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   getCoreRowModel,
   type ColumnDef,
@@ -12,6 +14,7 @@ import {
 import { usePersistedState } from "@/lib/ui/use-persisted-state";
 import { useSavedViews } from "@/lib/ui/use-saved-views";
 import { DataTable } from "@/components/ui/data-table";
+import { CrmIcon } from "@/components/ui/crm-icon";
 
 type DealCard = {
   id: number;
@@ -38,6 +41,7 @@ type DragState = {
 type DealsViewMode = "panel" | "table";
 type DealsQuickFilter = "all" | "high_value" | "without_contact" | "close_30d";
 type DealColumnKey = "name" | "amount" | "closeDate" | "priority" | "stage" | "contactName" | "companyId" | "createdDate";
+type ToastTone = "success" | "error" | "info";
 
 type DealTableRow = {
   rowId: string;
@@ -54,8 +58,8 @@ const DEAL_LABELS: Record<DealColumnKey, string> = {
   priority: "Prioridad",
   stage: "Estado",
   contactName: "Contacto",
-  companyId: "ID compa\u00f1\u00eda",
-  createdDate: "Fecha de creaci\u00f3n"
+  companyId: "ID compañía",
+  createdDate: "Fecha de creación"
 };
 
 const DEFAULT_COLUMNS: VisibilityState = {
@@ -72,7 +76,7 @@ const DEFAULT_COLUMNS: VisibilityState = {
 function formatAmountEur(rawAmount: string): string {
   const raw = String(rawAmount ?? "").trim();
   if (!raw) return "EUR 0";
-  if (raw.includes("EUR") || raw.includes("�")) return raw;
+  if (raw.includes("EUR") || raw.includes("\u20ac")) return raw;
 
   const normalized = raw
     .replace(/\s/g, "")
@@ -145,11 +149,23 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
   const [dragState, setDragState] = useState<DragState>(null);
   const [hoverStage, setHoverStage] = useState<string | null>(null);
   const [selectedViewId, setSelectedViewId] = useState("");
+  const [selectedDeal, setSelectedDeal] = useState<{ stage: string; card: DealCard } | null>(null);
+  const [toast, setToast] = useState<{ tone: ToastTone; message: string } | null>(null);
   const [viewMode, setViewMode] = usePersistedState<DealsViewMode>(`${prefix}:view_mode`, "panel");
   const [searchDraft, setSearchDraft] = usePersistedState(`${prefix}:search_draft`, "");
   const [searchApplied, setSearchApplied] = usePersistedState(`${prefix}:search_applied`, "");
   const [quickFilter, setQuickFilter] = usePersistedState<DealsQuickFilter>(`${prefix}:quick_filter`, "all");
   const [columnVisibility, setColumnVisibility] = usePersistedState<VisibilityState>(`${prefix}:columns`, DEFAULT_COLUMNS);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 2800);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
+  function showToast(message: string, tone: ToastTone = "info") {
+    setToast({ message, tone });
+  }
 
   const savedViews = useSavedViews({
     module: "deals",
@@ -170,6 +186,7 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
       setViewMode(nextView);
       setQuickFilter(nextQuick);
       setColumnVisibility(nextColumns);
+      showToast("Vista aplicada.", "success");
     }
   });
 
@@ -223,9 +240,19 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
       id: "name",
       header: DEAL_LABELS.name,
       cell: ({ row }) => (
-        <Link href={`/investors/${row.original.card.id}`} className="contact-name-link">
-          {row.original.card.name}
-        </Link>
+        <div className="contact-name-cell">
+          <button className="contact-name-link" onClick={() => setSelectedDeal({ stage: row.original.stage, card: row.original.card })}>
+            {row.original.card.name}
+          </button>
+          <button
+            type="button"
+            className="contact-preview-trigger"
+            onClick={() => setSelectedDeal({ stage: row.original.stage, card: row.original.card })}
+            aria-label={`Vista rápida de ${row.original.card.name}`}
+          >
+            <span className="toolbar-button-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span>
+          </button>
+        </div>
       )
     },
     {
@@ -304,6 +331,7 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    showToast("CSV exportado correctamente.", "info");
   }
 
   const visibleColumnCount = COLUMN_ORDER.filter((key) => table.getColumn(key)?.getIsVisible()).length;
@@ -317,6 +345,13 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
 
   return (
     <>
+      {toast ? (
+        <div className={`crm-toast crm-toast-${toast.tone}`} role="status" aria-live="polite">
+          <span className="crm-toast-dot" aria-hidden="true" />
+          <span>{toast.message}</span>
+        </div>
+      ) : null}
+
       <div className="entity-toolbar">
         <input
           className="toolbar-search"
@@ -355,63 +390,86 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
               ))}
             </select>
           </div>
-          <details className="entity-toolbar-menu">
-            <summary aria-label="M\u00e1s acciones de vista">Men\u00fa</summary>
-            <div className="entity-toolbar-menu-panel">
-              <div className="columns-editor" style={{ marginBottom: 0 }}>
-                {COLUMN_ORDER.map((key) => (
-                  <label key={key}>
-                    <input type="checkbox" checked={table.getColumn(key)?.getIsVisible() ?? false} onChange={() => toggleColumn(key)} />
-                    {DEAL_LABELS[key]}
-                  </label>
-                ))}
-              </div>
-              <button
-                onClick={async () => {
-                  const name = window.prompt("Nombre de la vista");
-                  if (!name) return;
-                  await savedViews.saveCurrent(name);
-                }}
-              >
-                Guardar vista
+
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button type="button" className="entity-toolbar-trigger">
+                <span className="toolbar-button-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span><span>Acciones</span>
               </button>
-              <button
-                disabled={!selectedViewId}
-                onClick={async () => {
-                  if (!selectedViewId) return;
-                  await savedViews.deleteView(selectedViewId);
-                  setSelectedViewId("");
-                }}
-              >
-                Eliminar vista
-              </button>
-              <button onClick={exportCsv}>Exportar</button>
-            </div>
-          </details>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content className="radix-menu-content" sideOffset={10} align="end">
+                <div className="radix-menu-label">Columnas visibles</div>
+                <div className="radix-menu-columns">
+                  {COLUMN_ORDER.map((key) => (
+                    <label key={key} className="radix-menu-checkbox-row">
+                      <input type="checkbox" checked={table.getColumn(key)?.getIsVisible() ?? false} onChange={() => toggleColumn(key)} />
+                      <span>{DEAL_LABELS[key]}</span>
+                    </label>
+                  ))}
+                </div>
+                <DropdownMenu.Separator className="radix-menu-separator" />
+                <DropdownMenu.Item
+                  className="radix-menu-item"
+                  onSelect={async (event) => {
+                    event.preventDefault();
+                    const name = window.prompt("Nombre de la vista");
+                    if (!name) return;
+                    await savedViews.saveCurrent(name);
+                    showToast("Vista guardada.", "success");
+                  }}
+                >
+                  Guardar vista
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  className="radix-menu-item"
+                  disabled={!selectedViewId}
+                  onSelect={async (event) => {
+                    event.preventDefault();
+                    if (!selectedViewId) return;
+                    await savedViews.deleteView(selectedViewId);
+                    setSelectedViewId("");
+                    showToast("Vista eliminada.", "info");
+                  }}
+                >
+                  Eliminar vista
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  className="radix-menu-item"
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    exportCsv();
+                  }}
+                >
+                  Exportar CSV
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
         </div>
       </div>
 
-      <div className="smart-tabs-row" role="tablist" aria-label="Filtros r\u00e1pidos de negocios">
+      <div className="smart-tabs-row" role="tablist" aria-label="Filtros rápidos de negocios">
         <button className={quickFilter === "all" ? "smart-tab smart-tab-active" : "smart-tab"} onClick={() => setQuickFilter("all")}>
-          Todos
+          <span className="smart-tab-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span><span>Todos</span>
         </button>
         <button
           className={quickFilter === "high_value" ? "smart-tab smart-tab-active" : "smart-tab"}
           onClick={() => setQuickFilter("high_value")}
         >
-          Valor alto <span className="contacts-badge">{highValueCount}</span>
+          <span className="smart-tab-icon" aria-hidden="true"><CrmIcon name="report" className="crm-icon" /></span><span>Valor alto</span> <span className="contacts-badge">{highValueCount}</span>
         </button>
         <button
           className={quickFilter === "without_contact" ? "smart-tab smart-tab-active" : "smart-tab"}
           onClick={() => setQuickFilter("without_contact")}
         >
-          Sin contacto <span className="contacts-badge">{withoutContactCount}</span>
+          <span className="smart-tab-icon" aria-hidden="true"><CrmIcon name="contacts" className="crm-icon" /></span><span>Sin contacto</span> <span className="contacts-badge">{withoutContactCount}</span>
         </button>
         <button
           className={quickFilter === "close_30d" ? "smart-tab smart-tab-active" : "smart-tab"}
           onClick={() => setQuickFilter("close_30d")}
         >
-          Cierre 30 d\u00edas <span className="contacts-badge">{close30dCount}</span>
+          <span className="smart-tab-icon" aria-hidden="true"><CrmIcon name="activity" className="crm-icon" /></span><span>Cierre 30 días</span> <span className="contacts-badge">{close30dCount}</span>
         </button>
       </div>
 
@@ -439,6 +497,7 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
                     setByStage((current) => moveDeal(current, dragState.fromStage, stage, dragState.dealId));
                     setDragState(null);
                     setHoverStage(null);
+                    showToast(`Negocio movido a ${stage}.`, "info");
                   }}
                 >
                   <header className="deals-column-header">
@@ -461,15 +520,15 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
                         }}
                       >
                         {table.getColumn("name")?.getIsVisible() ? (
-                          <Link href={`/investors/${card.id}`} className="deal-card-title">
+                          <button className="deal-card-title deal-card-title-button" onClick={() => setSelectedDeal({ stage, card })}>
                             {card.name}
-                          </Link>
+                          </button>
                         ) : null}
-                        {table.getColumn("companyId")?.getIsVisible() ? <div>ID compa\u00f1\u00eda: {card.id}</div> : null}
+                        {table.getColumn("companyId")?.getIsVisible() ? <div>ID compañía: {card.id}</div> : null}
                         {table.getColumn("amount")?.getIsVisible() ? <div>Importe: {formatAmountEur(card.amount)}</div> : null}
                         {table.getColumn("closeDate")?.getIsVisible() ? <div>Fecha estimada de cierre: {card.closeDate}</div> : null}
                         {table.getColumn("priority")?.getIsVisible() ? <div>Prioridad: {card.priority}</div> : null}
-                        {table.getColumn("createdDate")?.getIsVisible() ? <div>Fecha de creaci\u00f3n: {card.createdDate}</div> : null}
+                        {table.getColumn("createdDate")?.getIsVisible() ? <div>Fecha de creación: {card.createdDate}</div> : null}
                         {table.getColumn("contactName")?.getIsVisible() ? (
                           <>
                             <hr />
@@ -494,9 +553,66 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
           <div className="card" style={{ padding: "10px 12px" }}>
             <strong>Importe total (negocios visibles): {formatAmountEur(String(totalFilteredAmount))}</strong>
           </div>
-          <DataTable table={table} emptyLabel="Sin negocios." emptyHint="Todav\u00eda no hay negocios visibles con los filtros actuales." />
+          <DataTable table={table} emptyLabel="Sin negocios." emptyHint="Todavía no hay negocios visibles con los filtros actuales." />
         </div>
       )}
+
+      <Dialog.Root open={Boolean(selectedDeal)} onOpenChange={(open) => (!open ? setSelectedDeal(null) : null)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="radix-dialog-overlay" />
+          <Dialog.Content className="radix-sheet-content">
+            {selectedDeal ? (
+              <>
+                <div className="radix-dialog-head">
+                  <div>
+                    <Dialog.Title>{selectedDeal.card.name}</Dialog.Title>
+                    <Dialog.Description>{selectedDeal.stage}</Dialog.Description>
+                  </div>
+                  <Dialog.Close asChild>
+                    <button type="button" className="radix-dialog-close" aria-label="Cerrar">×</button>
+                  </Dialog.Close>
+                </div>
+
+                <div className="contact-quick-sheet-meta">
+                  <div className="contact-quick-sheet-item">
+                    <span>Importe</span>
+                    <strong>{formatAmountEur(selectedDeal.card.amount)}</strong>
+                  </div>
+                  <div className="contact-quick-sheet-item">
+                    <span>Prioridad</span>
+                    <strong>{selectedDeal.card.priority || "-"}</strong>
+                  </div>
+                  <div className="contact-quick-sheet-item">
+                    <span>Cierre estimado</span>
+                    <strong>{selectedDeal.card.closeDate || "-"}</strong>
+                  </div>
+                  <div className="contact-quick-sheet-item">
+                    <span>Creación</span>
+                    <strong>{selectedDeal.card.createdDate || "-"}</strong>
+                  </div>
+                </div>
+
+                <div className="contact-quick-sheet-stack">
+                  <div className="contact-quick-sheet-panel">
+                    <p className="contact-quick-sheet-label">Contacto asociado</p>
+                    <p className="contact-quick-sheet-copy">{selectedDeal.card.contactName || "Sin contacto asociado todavía."}</p>
+                  </div>
+                </div>
+
+                <div className="radix-dialog-actions">
+                  <Dialog.Close asChild>
+                    <button type="button" className="quick-pill quick-pill-ghost">Cerrar</button>
+                  </Dialog.Close>
+                  <Link href={`/investors/${selectedDeal.card.id}`} className="contacts-add">
+                    <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="edit" className="crm-icon" /></span>
+                    <span>Abrir cuenta</span>
+                  </Link>
+                </div>
+              </>
+            ) : null}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </>
   );
 }

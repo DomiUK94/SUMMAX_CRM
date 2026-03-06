@@ -223,7 +223,7 @@ export default async function SugerenciasPage({ searchParams }: SearchProps) {
 
     await source.from("suggestion_events").insert({
       suggestion_id: created.data.id,
-      event_type: "creaciÃ³n",
+      event_type: "creaci\u00f3n",
       body: "Entrada creada",
       created_by_user_id: actor.id,
       created_by_email: actor.email
@@ -349,7 +349,7 @@ export default async function SugerenciasPage({ searchParams }: SearchProps) {
       const tagEventsPayload = suggestionIds.map((suggestionId) => ({
         suggestion_id: suggestionId,
         event_type: "nota",
-        body: `Etiqueta aÃ±adida en lote: ${normalizedTag}`,
+        body: `Etiqueta a\u00f1adida en lote: ${normalizedTag}`, 
         created_by_user_id: actor.id,
         created_by_email: actor.email
       }));
@@ -430,7 +430,7 @@ export default async function SugerenciasPage({ searchParams }: SearchProps) {
     const list = eventsBySuggestion.get(s.id) ?? [];
     const createdAtMs = new Date(s.created_at).getTime();
     const firstAdminResponse = list
-      .filter((ev) => adminIds.has(ev.created_by_user_id) && ev.event_type !== "creaciÃ³n")
+      .filter((ev) => adminIds.has(ev.created_by_user_id) && ev.event_type !== "creaci\u00f3n")
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
 
     if (firstAdminResponse) {

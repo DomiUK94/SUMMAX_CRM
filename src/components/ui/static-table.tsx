@@ -2,6 +2,7 @@
 
 type StaticTableProps = {
   columns: ReactNode[];
+  headerFilters?: ReactNode[];
   rows: ReactNode[][];
   emptyLabel: ReactNode;
   emptyHint?: ReactNode;
@@ -9,7 +10,7 @@ type StaticTableProps = {
   className?: string;
 };
 
-export function StaticTable({ columns, rows, emptyLabel, emptyHint, emptyAction, className }: StaticTableProps) {
+export function StaticTable({ columns, headerFilters, rows, emptyLabel, emptyHint, emptyAction, className }: StaticTableProps) {
   return (
     <div className={`table-shell ${className ?? "contacts-table-wrap"}`.trim()}>
       <table className="contacts-crm-table">
@@ -19,6 +20,13 @@ export function StaticTable({ columns, rows, emptyLabel, emptyHint, emptyAction,
               <th key={index}>{column}</th>
             ))}
           </tr>
+          {headerFilters?.length ? (
+            <tr className="table-filter-row">
+              {columns.map((_, index) => (
+                <th key={index}>{headerFilters[index] ?? null}</th>
+              ))}
+            </tr>
+          ) : null}
         </thead>
         <tbody>
           {rows.length === 0 ? (

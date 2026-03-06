@@ -220,7 +220,7 @@ export default async function SugerenciaDetailPage({ params }: Params) {
                 </select>
               </label>
               <textarea name="body" rows={4} placeholder="Describe avance, validacion, bug o siguiente paso..." aria-label="Contenido del comentario para historial" required />
-              <button type="submit" aria-label="Añadir comentario al historial">A?adir al historial</button>
+              <button type="submit" aria-label="Añadir comentario al historial">Añadir al historial</button>
             </form>
           </div>
         </div>
@@ -243,7 +243,7 @@ export default async function SugerenciaDetailPage({ params }: Params) {
                 </article>
               );
             })}
-            {(events ?? []).length === 0 ? <p className="muted">Sin historial todav?a.</p> : null}
+            {(events ?? []).length === 0 ? <p className="muted">Sin historial todavía.</p> : null}
           </div>
         </div>
       </div>

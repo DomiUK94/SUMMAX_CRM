@@ -67,7 +67,7 @@ export default async function InvestorDetailPage({ params }: { params: { id: str
         <div className="card">
           <h3>Comentarios</h3>
           <form action={addCommentAction} className="stack">
-            <textarea name="body" rows={4} placeholder="A?adir comentario..." />
+            <textarea name="body" rows={4} placeholder="Añadir comentario..." />
             <button type="submit">Guardar comentario</button>
           </form>
           <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "12px 0" }} />

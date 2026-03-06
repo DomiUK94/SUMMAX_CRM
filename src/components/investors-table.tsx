@@ -1,7 +1,10 @@
 ﻿"use client";
 
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
+import * as Dialog from "@radix-ui/react-dialog";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   getCoreRowModel,
   type ColumnDef,
@@ -12,22 +15,24 @@ import type { ListedInvestor } from "@/lib/db/crm";
 import { usePersistedState } from "@/lib/ui/use-persisted-state";
 import { useSavedViews } from "@/lib/ui/use-saved-views";
 import { DataTable } from "@/components/ui/data-table";
+import { CrmIcon } from "@/components/ui/crm-icon";
 
 type InvestorColumnKey = "id" | "name" | "category" | "website" | "strategy" | "status_name" | "sector" | "updated_at";
 type InvestorsViewMode = "table" | "panel";
 type InvestorsQuickFilter = "all" | "without_web" | "updated_7d";
+type ToastTone = "success" | "error" | "info";
 
 const COLUMN_ORDER: InvestorColumnKey[] = ["id", "name", "category", "website", "strategy", "status_name", "sector", "updated_at"];
 
 const INVESTOR_LABELS: Record<InvestorColumnKey, string> = {
   id: "ID",
   name: "Nombre cuenta",
-  category: "Categor\u00eda",
+  category: "Categoría",
   website: "Web",
   strategy: "Estrategia",
   status_name: "Estado",
   sector: "Sector",
-  updated_at: "\u00daltima actualizaci\u00f3n"
+  updated_at: "Última actualización"
 };
 
 const DEFAULT_COLUMNS: VisibilityState = {
@@ -69,6 +74,17 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
   const [viewMode, setViewMode] = usePersistedState<InvestorsViewMode>(`${prefix}:view_mode`, "table");
   const [quickFilter, setQuickFilter] = usePersistedState<InvestorsQuickFilter>(`${prefix}:quick_filter`, "all");
   const [columnVisibility, setColumnVisibility] = usePersistedState<VisibilityState>(`${prefix}:columns`, DEFAULT_COLUMNS);
+  const [toast, setToast] = useState<{ tone: ToastTone; message: string } | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 2800);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
+  function showToast(message: string, tone: ToastTone = "info") {
+    setToast({ message, tone });
+  }
 
   const savedViews = useSavedViews({
     module: "investors",
@@ -86,6 +102,7 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
       setViewMode(nextView);
       setQuickFilter(nextQuick);
       setColumnVisibility(nextColumns);
+      showToast("Vista aplicada.", "success");
     }
   });
 
@@ -123,6 +140,7 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    showToast("CSV exportado correctamente.", "info");
   }
 
   const columns = useMemo<ColumnDef<ListedInvestor>[]>(() => [
@@ -137,9 +155,19 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
       id: "name",
       header: INVESTOR_LABELS.name,
       cell: ({ row }) => (
-        <button className="contact-name-link" onClick={() => setSelected(row.original)}>
-          {displayInvestorValue(row.original, "name")}
-        </button>
+        <div className="contact-name-cell">
+          <button className="contact-name-link" onClick={() => setSelected(row.original)}>
+            {displayInvestorValue(row.original, "name")}
+          </button>
+          <button
+            type="button"
+            className="contact-preview-trigger"
+            onClick={() => setSelected(row.original)}
+            aria-label={`Vista rápida de ${row.original.name}`}
+          >
+            <span className="toolbar-button-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span>
+          </button>
+        </div>
       )
     },
     {
@@ -201,6 +229,13 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
 
   return (
     <>
+      {toast ? (
+        <div className={`crm-toast crm-toast-${toast.tone}`} role="status" aria-live="polite">
+          <span className="crm-toast-dot" aria-hidden="true" />
+          <span>{toast.message}</span>
+        </div>
+      ) : null}
+
       <div className="entity-toolbar">
         <input
           className="companies-search toolbar-search"
@@ -239,57 +274,80 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
               ))}
             </select>
           </div>
-          <details className="entity-toolbar-menu">
-            <summary aria-label="M\u00e1s acciones de vista">Men\u00fa</summary>
-            <div className="entity-toolbar-menu-panel">
-              <div className="columns-editor" style={{ marginBottom: 0 }}>
-                {COLUMN_ORDER.map((key) => (
-                  <label key={key}>
-                    <input type="checkbox" checked={table.getColumn(key)?.getIsVisible() ?? false} onChange={() => toggleColumn(key)} />
-                    {INVESTOR_LABELS[key]}
-                  </label>
-                ))}
-              </div>
-              <button
-                onClick={async () => {
-                  const name = window.prompt("Nombre de la vista");
-                  if (!name) return;
-                  await savedViews.saveCurrent(name);
-                }}
-              >
-                Guardar vista
+
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button type="button" className="entity-toolbar-trigger">
+                <span className="toolbar-button-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span><span>Acciones</span>
               </button>
-              <button
-                disabled={!selectedViewId}
-                onClick={async () => {
-                  if (!selectedViewId) return;
-                  await savedViews.deleteView(selectedViewId);
-                  setSelectedViewId("");
-                }}
-              >
-                Eliminar vista
-              </button>
-              <button onClick={exportCsv}>Exportar</button>
-            </div>
-          </details>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content className="radix-menu-content" sideOffset={10} align="end">
+                <div className="radix-menu-label">Columnas visibles</div>
+                <div className="radix-menu-columns">
+                  {COLUMN_ORDER.map((key) => (
+                    <label key={key} className="radix-menu-checkbox-row">
+                      <input type="checkbox" checked={table.getColumn(key)?.getIsVisible() ?? false} onChange={() => toggleColumn(key)} />
+                      <span>{INVESTOR_LABELS[key]}</span>
+                    </label>
+                  ))}
+                </div>
+                <DropdownMenu.Separator className="radix-menu-separator" />
+                <DropdownMenu.Item
+                  className="radix-menu-item"
+                  onSelect={async (event) => {
+                    event.preventDefault();
+                    const name = window.prompt("Nombre de la vista");
+                    if (!name) return;
+                    await savedViews.saveCurrent(name);
+                    showToast("Vista guardada.", "success");
+                  }}
+                >
+                  Guardar vista
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  className="radix-menu-item"
+                  disabled={!selectedViewId}
+                  onSelect={async (event) => {
+                    event.preventDefault();
+                    if (!selectedViewId) return;
+                    await savedViews.deleteView(selectedViewId);
+                    setSelectedViewId("");
+                    showToast("Vista eliminada.", "info");
+                  }}
+                >
+                  Eliminar vista
+                </DropdownMenu.Item>
+                <DropdownMenu.Item
+                  className="radix-menu-item"
+                  onSelect={(event) => {
+                    event.preventDefault();
+                    exportCsv();
+                  }}
+                >
+                  Exportar CSV
+                </DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
         </div>
       </div>
 
-      <div className="smart-tabs-row" role="tablist" aria-label="Filtros r\u00e1pidos de cuentas">
+      <div className="smart-tabs-row" role="tablist" aria-label="Filtros rápidos de cuentas">
         <button className={quickFilter === "all" ? "smart-tab smart-tab-active" : "smart-tab"} onClick={() => setQuickFilter("all")}>
-          Todas
+          <span className="smart-tab-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span><span>Todas</span>
         </button>
         <button
           className={quickFilter === "without_web" ? "smart-tab smart-tab-active" : "smart-tab"}
           onClick={() => setQuickFilter("without_web")}
         >
-          Sin web <span className="contacts-badge">{noWebCount}</span>
+          <span className="smart-tab-icon" aria-hidden="true"><CrmIcon name="search" className="crm-icon" /></span><span>Sin web</span> <span className="contacts-badge">{noWebCount}</span>
         </button>
         <button
           className={quickFilter === "updated_7d" ? "smart-tab smart-tab-active" : "smart-tab"}
           onClick={() => setQuickFilter("updated_7d")}
         >
-          Actualizadas 7 d\u00edas <span className="contacts-badge">{updated7dCount}</span>
+          <span className="smart-tab-icon" aria-hidden="true"><CrmIcon name="activity" className="crm-icon" /></span><span>Actualizadas 7 días</span> <span className="contacts-badge">{updated7dCount}</span>
         </button>
       </div>
 
@@ -326,20 +384,62 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
         />
       )}
 
-      {selected ? (
-        <div className="modal-backdrop" onClick={() => setSelected(null)}>
-          <motion.div className="modal-card" initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} onClick={(event) => event.stopPropagation()}>
-            <button className="modal-close" onClick={() => setSelected(null)} aria-label="Cerrar">
-              X
-            </button>
-            <h3 style={{ marginTop: 0 }}>{selected.name}</h3>
-            <p><strong>Categor\u00eda:</strong> {selected.category ?? "-"}</p>
-            <p><strong>Web:</strong> {selected.website ?? "-"}</p>
-            <p><strong>Estrategia:</strong> {selected.strategy ?? "-"}</p>
-            <p><strong>\u00daltima actualizaci\u00f3n:</strong> {selected.updated_at ? new Date(selected.updated_at).toLocaleString("es-ES") : "-"}</p>
-          </motion.div>
-        </div>
-      ) : null}
+      <Dialog.Root open={Boolean(selected)} onOpenChange={(open) => (!open ? setSelected(null) : null)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="radix-dialog-overlay" />
+          <Dialog.Content className="radix-sheet-content">
+            {selected ? (
+              <>
+                <div className="radix-dialog-head">
+                  <div>
+                    <Dialog.Title>{selected.name}</Dialog.Title>
+                    <Dialog.Description>{selected.category ?? "Sin categoría asignada"}</Dialog.Description>
+                  </div>
+                  <Dialog.Close asChild>
+                    <button type="button" className="radix-dialog-close" aria-label="Cerrar">×</button>
+                  </Dialog.Close>
+                </div>
+
+                <div className="contact-quick-sheet-meta">
+                  <div className="contact-quick-sheet-item">
+                    <span>Web</span>
+                    <strong>{selected.website ?? "Sin web"}</strong>
+                  </div>
+                  <div className="contact-quick-sheet-item">
+                    <span>Estrategia</span>
+                    <strong>{selected.strategy ?? "Sin estrategia"}</strong>
+                  </div>
+                  <div className="contact-quick-sheet-item">
+                    <span>Estado</span>
+                    <strong>{selected.status_name ?? "Sin estado"}</strong>
+                  </div>
+                  <div className="contact-quick-sheet-item">
+                    <span>Última actualización</span>
+                    <strong>{selected.updated_at ? new Date(selected.updated_at).toLocaleString("es-ES") : "-"}</strong>
+                  </div>
+                </div>
+
+                <div className="contact-quick-sheet-stack">
+                  <div className="contact-quick-sheet-panel">
+                    <p className="contact-quick-sheet-label">Sector</p>
+                    <p className="contact-quick-sheet-copy">{selected.sector ?? "Sin sector consolidado todavía."}</p>
+                  </div>
+                </div>
+
+                <div className="radix-dialog-actions">
+                  <Dialog.Close asChild>
+                    <button type="button" className="quick-pill quick-pill-ghost">Cerrar</button>
+                  </Dialog.Close>
+                  <Link href={`/investors/${encodeURIComponent(selected.id)}`} className="contacts-add">
+                    <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="edit" className="crm-icon" /></span>
+                    <span>Abrir ficha completa</span>
+                  </Link>
+                </div>
+              </>
+            ) : null}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </>
   );
 }

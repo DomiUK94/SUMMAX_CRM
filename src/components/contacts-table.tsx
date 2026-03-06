@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import * as Dialog from "@radix-ui/react-dialog";
@@ -17,8 +17,10 @@ import type { ListedContact } from "@/lib/db/crm";
 import { usePersistedState } from "@/lib/ui/use-persisted-state";
 import { useSavedViews } from "@/lib/ui/use-saved-views";
 import { DataTable } from "@/components/ui/data-table";
+import { CrmIcon } from "@/components/ui/crm-icon";
 
 type OwnerOption = { id: string; email: string; full_name?: string | null };
+type ToastTone = "success" | "error" | "info";
 
 type ColumnKey =
   | "id"
@@ -129,6 +131,13 @@ function displayValue(contact: ListedContact, key: ColumnKey): string {
   return raw == null || raw === "" ? "--" : String(raw);
 }
 
+function fieldSavedMessage(field: "owner_user_id" | "prioritario" | "email" | "telefono") {
+  if (field === "owner_user_id") return "Propietario actualizado.";
+  if (field === "prioritario") return "Prioridad actualizada.";
+  if (field === "email") return "Email actualizado.";
+  return "Teléfono actualizado.";
+}
+
 export function ContactsTable({
   contacts,
   owners,
@@ -153,6 +162,18 @@ export function ContactsTable({
   const [quickFilter, setQuickFilter] = usePersistedState<ContactsQuickFilter>(`${prefix}:quick_filter`, "all");
   const [columnVisibility, setColumnVisibility] = usePersistedState<VisibilityState>(`${prefix}:columns`, DEFAULT_COLUMNS);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [quickViewContact, setQuickViewContact] = useState<ListedContact | null>(null);
+  const [toast, setToast] = useState<{ tone: ToastTone; message: string } | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timeout = window.setTimeout(() => setToast(null), 2800);
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
+  function showToast(message: string, tone: ToastTone = "info") {
+    setToast({ message, tone });
+  }
 
   const savedViews = useSavedViews({
     module: "contacts",
@@ -175,6 +196,7 @@ export function ContactsTable({
       setQuickFilter(nextQuick);
       setViewMode(nextView);
       setColumnVisibility(nextColumns);
+      showToast("Vista aplicada.", "success");
     }
   });
 
@@ -209,9 +231,12 @@ export function ContactsTable({
       setOwnerToAssign("");
       setRowSelection({});
       setBulkAssignOpen(false);
+      showToast("Propietario actualizado en la selección.", "success");
       router.refresh();
     } catch (error) {
-      setAssignError(error instanceof Error ? error.message : "Error inesperado");
+      const message = error instanceof Error ? error.message : "Error inesperado";
+      setAssignError(message);
+      showToast(message, "error");
     } finally {
       setAssigning(false);
     }
@@ -232,9 +257,12 @@ export function ContactsTable({
         const payload = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(payload?.error ?? "No se pudo guardar");
       }
+      showToast(fieldSavedMessage(field), "success");
       router.refresh();
     } catch (error) {
-      setAssignError(error instanceof Error ? error.message : "Error inesperado");
+      const message = error instanceof Error ? error.message : "Error inesperado";
+      setAssignError(message);
+      showToast(message, "error");
     } finally {
       setInlineBusyKey(null);
     }
@@ -261,6 +289,7 @@ export function ContactsTable({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    showToast("CSV exportado correctamente.", "info");
   }
 
   const columns = useMemo<ColumnDef<ListedContact>[]>(
@@ -299,9 +328,21 @@ export function ContactsTable({
         id: "full_name",
         header: COLUMN_LABELS.full_name,
         cell: ({ row }) => (
-          <Link className="contact-name-link" href={`/contacts/${encodeURIComponent(row.original.id)}`}>
-            {displayValue(row.original, "full_name")}
-          </Link>
+          <div className="contact-name-cell">
+            <Link className="contact-name-link" href={`/contacts/${encodeURIComponent(row.original.id)}`}>
+              {displayValue(row.original, "full_name")}
+            </Link>
+            <button
+              type="button"
+              className="contact-preview-trigger"
+              onClick={() => setQuickViewContact(row.original)}
+              aria-label={`Vista rápida de ${row.original.full_name}`}
+            >
+              <span className="toolbar-button-icon" aria-hidden="true">
+                <CrmIcon name="overview" className="crm-icon" />
+              </span>
+            </button>
+          </div>
         )
       },
       {
@@ -454,6 +495,13 @@ export function ContactsTable({
 
   return (
     <>
+      {toast ? (
+        <div className={`crm-toast crm-toast-${toast.tone}`} role="status" aria-live="polite">
+          <span className="crm-toast-dot" aria-hidden="true" />
+          <span>{toast.message}</span>
+        </div>
+      ) : null}
+
       <div className="entity-toolbar">
         <input
           className="contacts-search toolbar-search"
@@ -496,7 +544,7 @@ export function ContactsTable({
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <button type="button" className="entity-toolbar-trigger">
-                Acciones
+                <span className="toolbar-button-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span><span>Acciones</span>
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
@@ -518,6 +566,7 @@ export function ContactsTable({
                     const name = window.prompt("Nombre de la vista");
                     if (!name) return;
                     await savedViews.saveCurrent(name);
+                    showToast("Vista guardada.", "success");
                   }}
                 >
                   Guardar vista
@@ -530,6 +579,7 @@ export function ContactsTable({
                     if (!selectedViewId) return;
                     await savedViews.deleteView(selectedViewId);
                     setSelectedViewId("");
+                    showToast("Vista eliminada.", "info");
                   }}
                 >
                   Eliminar vista
@@ -552,7 +602,7 @@ export function ContactsTable({
       <div className="row" style={{ justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: 8 }}>
         <div className="smart-tabs-row" role="tablist" aria-label="Filtros rápidos de contactos" style={{ margin: 0, flex: 1 }}>
           <button className={quickFilter === "all" ? "smart-tab smart-tab-active" : "smart-tab"} onClick={() => setQuickFilter("all")}>
-            Todos
+            <span className="smart-tab-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span><span>Todos</span>
           </button>
           <button className={quickFilter === "needs_action" ? "smart-tab smart-tab-active" : "smart-tab"} onClick={() => setQuickFilter("needs_action")}>
             Requieren acción <span className="contacts-badge">{needsActionCount}</span>
@@ -561,6 +611,8 @@ export function ContactsTable({
             Críticos +14 días <span className="contacts-badge">{criticalCount}</span>
           </button>
         </div>
+
+        {(inlineBusyKey || assigning) ? <span className="entity-feedback-chip">Guardando cambios...</span> : null}
 
         <Dialog.Root open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
           <Dialog.Trigger asChild>
@@ -612,7 +664,7 @@ export function ContactsTable({
                   </button>
                 </Dialog.Close>
                 <button onClick={assignOwnerBulk} disabled={!ownerToAssign || selectedCount === 0 || assigning}>
-                  {assigning ? "Asignando..." : "Confirmar asignaci?n"}
+                  {assigning ? "Asignando..." : "Confirmar asignación"}
                 </button>
               </div>
             </Dialog.Content>
@@ -650,9 +702,94 @@ export function ContactsTable({
           table={table}
           emptyLabel="Sin contactos."
           emptyHint="Prueba otro filtro o crea el primer contacto para empezar a trabajar la vista."
-          emptyAction={<Link href="/contacts/new" className="contacts-tab">Crear contacto</Link>}
+          emptyAction={<Link href="/contacts/new" className="contacts-tab"><span className="module-tab-icon" aria-hidden="true"><CrmIcon name="plus" className="crm-icon" /></span><span>Crear contacto</span></Link>}
         />
       )}
+
+      <Dialog.Root open={Boolean(quickViewContact)} onOpenChange={(open) => (!open ? setQuickViewContact(null) : null)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="radix-dialog-overlay" />
+          <Dialog.Content className="radix-sheet-content">
+            {quickViewContact ? (
+              <>
+                <div className="radix-dialog-head">
+                  <div>
+                    <Dialog.Title>{quickViewContact.full_name}</Dialog.Title>
+                    <Dialog.Description>{quickViewContact.investor_name ?? "Sin compañía asociada"}</Dialog.Description>
+                  </div>
+                  <Dialog.Close asChild>
+                    <button type="button" className="radix-dialog-close" aria-label="Cerrar">
+                      ×
+                    </button>
+                  </Dialog.Close>
+                </div>
+
+                <div className="contact-quick-sheet-meta">
+                  <div className="contact-quick-sheet-item">
+                    <span>Email</span>
+                    <strong>{quickViewContact.email ?? "Sin email"}</strong>
+                  </div>
+                  <div className="contact-quick-sheet-item">
+                    <span>Teléfono</span>
+                    <strong>{quickViewContact.phone ?? "Sin teléfono"}</strong>
+                  </div>
+                  <div className="contact-quick-sheet-item">
+                    <span>Propietario</span>
+                    <strong>{quickViewContact.owner_email ?? "Sin propietario"}</strong>
+                  </div>
+                  <div className="contact-quick-sheet-item">
+                    <span>Prioridad</span>
+                    <strong>{quickViewContact.status_name ?? "Sin prioridad"}</strong>
+                  </div>
+                </div>
+
+                <div className="contact-quick-sheet-stack">
+                  <div className="contact-quick-sheet-panel">
+                    <p className="contact-quick-sheet-label">Seguimiento</p>
+                    <div className="contact-quick-sheet-status-row">
+                      <span className={`contact-followup-badge contact-followup-${followUpLevel(quickViewContact.updated_at)}`}>
+                        {followUpLevel(quickViewContact.updated_at).toUpperCase()}
+                      </span>
+                      <span className="contact-quick-sheet-muted">{daysWithoutAction(quickViewContact.updated_at)} días sin acción</span>
+                    </div>
+                  </div>
+
+                  <div className="contact-quick-sheet-panel">
+                    <p className="contact-quick-sheet-label">Notas rápidas</p>
+                    <p className="contact-quick-sheet-copy">{quickViewContact.comments ?? "Sin comentarios todavía."}</p>
+                  </div>
+
+                  <div className="contact-quick-sheet-panel">
+                    <p className="contact-quick-sheet-label">Canales</p>
+                    <div className="contact-quick-sheet-links">
+                      {quickViewContact.linkedin ? (
+                        <a href={quickViewContact.linkedin} target="_blank" rel="noreferrer" className="quick-pill quick-pill-ghost">
+                          LinkedIn
+                        </a>
+                      ) : null}
+                      {quickViewContact.email ? (
+                        <a href={`mailto:${quickViewContact.email}`} className="quick-pill quick-pill-ghost">
+                          Email
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="radix-dialog-actions">
+                  <Dialog.Close asChild>
+                    <button type="button" className="quick-pill quick-pill-ghost">Cerrar</button>
+                  </Dialog.Close>
+                  <Link href={`/contacts/${encodeURIComponent(quickViewContact.id)}`} className="contacts-add">
+                    <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="edit" className="crm-icon" /></span>
+                    <span>Abrir ficha completa</span>
+                  </Link>
+                </div>
+              </>
+            ) : null}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </>
   );
 }
