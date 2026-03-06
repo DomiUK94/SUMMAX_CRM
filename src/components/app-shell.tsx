@@ -3,10 +3,12 @@ import Image from "next/image";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 import { WorkspaceQuickLinks } from "@/components/workspace-quick-links";
+import { CrmIcon } from "@/components/ui/crm-icon";
 
 type NavItem = {
   href: string;
   label: string;
+  icon: Parameters<typeof CrmIcon>[0]["name"];
   visible?: boolean;
 };
 
@@ -26,6 +28,9 @@ function renderNavGroups(groups: NavGroup[]) {
         <div className="nav-submenu">
           {items.map((item) => (
             <Link key={item.href} href={item.href} className="nav-link">
+              <span className="nav-link-icon" aria-hidden="true">
+                <CrmIcon name={item.icon} className="crm-icon" />
+              </span>
               <span>{item.label}</span>
             </Link>
           ))}
@@ -62,34 +67,34 @@ export async function AppShell({
     {
       title: "Dashboards",
       items: [
-        { href: "/dashboard/me", label: "Mi dashboard" },
-        { href: "/dashboard/general", label: "Dashboard general", visible: canViewGlobal }
+        { href: "/dashboard/me", label: "Mi dashboard", icon: "dashboard" },
+        { href: "/dashboard/general", label: "Dashboard general", icon: "overview", visible: canViewGlobal }
       ]
     },
     {
       title: "CRM",
       items: [
-        { href: "/search", label: "Búsqueda global" },
-        { href: "/contacts", label: "Contactos" },
-        { href: "/investors", label: "Cuentas" },
-        { href: "/acuerdos", label: "Negocios" },
-        { href: "/actividades", label: "Actividades" }
+        { href: "/search", label: "Búsqueda global", icon: "search" },
+        { href: "/contacts", label: "Contactos", icon: "contacts" },
+        { href: "/investors", label: "Cuentas", icon: "companies" },
+        { href: "/acuerdos", label: "Negocios", icon: "deals" },
+        { href: "/actividades", label: "Actividades", icon: "activity" }
       ]
     },
     {
       title: "Configuración",
       items: [
-        { href: "/imports", label: "Importaciones", visible: isAdmin },
-        { href: "/exports", label: "Exportaciones", visible: isAdmin },
-        { href: "/changelog", label: "ChangeLog" },
-        { href: "/sugerencias", label: "Sugerencias y bugs" },
-        { href: "/usuarios", label: "Usuarios", visible: isAdmin || isManager },
-        { href: "/mi-cuenta", label: "Mi cuenta" }
+        { href: "/imports", label: "Importaciones", icon: "imports", visible: isAdmin },
+        { href: "/exports", label: "Exportaciones", icon: "exports", visible: isAdmin },
+        { href: "/changelog", label: "ChangeLog", icon: "changelog" },
+        { href: "/sugerencias", label: "Sugerencias y bugs", icon: "feedback" },
+        { href: "/usuarios", label: "Usuarios", icon: "users", visible: isAdmin || isManager },
+        { href: "/mi-cuenta", label: "Mi cuenta", icon: "account" }
       ]
     },
     {
       title: "Analítica",
-      items: [{ href: "/reporte-financiacion", label: "Reporte financiación" }]
+      items: [{ href: "/reporte-financiacion", label: "Reporte financiación", icon: "report" }]
     }
   ];
 
@@ -113,7 +118,12 @@ export async function AppShell({
 
         <header className="workspace-header card">
           <div className="workspace-header-copy">
-            <p className="workspace-kicker">Workspace</p>
+            <p className="workspace-kicker">
+              <span className="workspace-kicker-icon" aria-hidden="true">
+                <CrmIcon name="spark" className="crm-icon" />
+              </span>
+              <span>Workspace</span>
+            </p>
             <h1>{title}</h1>
             {subtitle ? <p className="muted">{subtitle}</p> : null}
           </div>

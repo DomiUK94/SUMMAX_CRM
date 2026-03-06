@@ -7,6 +7,7 @@ import { normalizePerPage } from "@/lib/ui/pagination";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 import Link from "next/link";
 import { listContactsPage, type ContactsTab } from "@/lib/db/crm";
+import { CrmIcon } from "@/components/ui/crm-icon";
 
 const TABS: Array<{ key: ContactsTab; label: string }> = [
   { key: "mine", label: "Mis contactos" },
@@ -98,18 +99,19 @@ export default async function ContactsPage({
               href={hrefFor(tab.key, 1, perPage)}
               className={`contacts-tab ${activeTab === tab.key ? "contacts-tab-active" : ""}`}
             >
-              {tab.label}
+              <span className="module-tab-icon" aria-hidden="true"><CrmIcon name={tab.key === "mine" ? "contacts" : tab.key === "all" ? "overview" : tab.key === "unassigned" ? "warning" : "activity"} className="crm-icon" /></span>
+              <span>{tab.label}</span>
               <span className="contacts-badge">{tabCounts[tab.key]}</span>
             </Link>
           ))}
           <Link href="/contacts/manage" className="contacts-edit">
-            Modificar contactos
+            <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="edit" className="crm-icon" /></span><span>Modificar contactos</span>
           </Link>
           <Link href="/contacts/new" className="contacts-add">
             Añadir
           </Link>
           <Link href="/contacts/duplicates" className="contacts-tab contacts-tab-duplicates">
-            Posibles duplicados
+            <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="warning" className="crm-icon" /></span><span>Posibles duplicados</span>
           </Link>
         </div>
         <div className="contacts-toolbar card">

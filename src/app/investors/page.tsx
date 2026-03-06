@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth/session";
 import { normalizePerPage } from "@/lib/ui/pagination";
 import Link from "next/link";
 import { listInvestorsPage } from "@/lib/db/crm";
+import { CrmIcon } from "@/components/ui/crm-icon";
 
 function normalizePage(value: string | undefined): number {
   const parsed = Number(value ?? "1");
@@ -50,10 +51,10 @@ export default async function InvestorsPage({
       <div className="companies-shell">
         <div className="companies-top-tabs">
           <button className="companies-tab companies-tab-active">
-            Todas las cuentas <span className="companies-badge">{totalCount}</span>
+            <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="companies" className="crm-icon" /></span><span>Todas las cuentas</span> <span className="companies-badge">{totalCount}</span>
           </button>
           <Link href="/investors/manage" className="companies-edit">
-            Modificar datos cuentas
+            <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="edit" className="crm-icon" /></span><span>Modificar datos cuentas</span>
           </Link>
           <button className="companies-add">Añadir</button>
         </div>

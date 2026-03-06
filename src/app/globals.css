@@ -3416,3 +3416,89 @@ button {
     grid-template-columns: 1fr;
   }
 }
+
+/* Shared iconography layer */
+.crm-icon {
+  width: 16px;
+  height: 16px;
+  display: block;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+}
+
+.nav-link-icon,
+.workspace-kicker-icon,
+.module-tab-icon,
+.quick-pill-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.nav-link-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #d8ebff;
+  border: 1px solid rgba(214, 235, 255, 0.1);
+}
+
+.nav-link:hover .nav-link-icon {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+}
+
+.workspace-kicker {
+  gap: 10px;
+}
+
+.workspace-kicker-icon {
+  width: 24px;
+  height: 24px;
+  color: #0e7462;
+}
+
+.quick-pill-icon {
+  width: 22px;
+  height: 22px;
+}
+
+.module-tab-icon {
+  width: 18px;
+  height: 18px;
+  color: currentColor;
+}
+
+.contacts-tab,
+.companies-tab,
+.deals-main-tab,
+.contacts-add,
+.contacts-edit,
+.companies-add,
+.companies-edit,
+.deals-add,
+.deals-edit,
+.quick-pill {
+  gap: 8px;
+}
+
+.contacts-add .module-tab-icon,
+.contacts-edit .module-tab-icon,
+.companies-add .module-tab-icon,
+.companies-edit .module-tab-icon,
+.deals-add .module-tab-icon,
+.deals-edit .module-tab-icon {
+  opacity: 0.92;
+}
+
+@media (max-width: 720px) {
+  .nav-link-icon {
+    width: 28px;
+    height: 28px;
+  }
+}

@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth/session";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 import { normalizePerPage } from "@/lib/ui/pagination";
 import Link from "next/link";
+import { CrmIcon } from "@/components/ui/crm-icon";
 
 type DealRow = {
   company_id: number;
@@ -142,10 +143,10 @@ export default async function AcuerdosPage({
       <div className="deals-shell">
         <div className="deals-top-tabs">
           <button className="deals-main-tab deals-main-tab-active">
-            Todos los negocios <span className="deals-badge">{totalCount}</span>
+            <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="deals" className="crm-icon" /></span><span>Todos los negocios</span> <span className="deals-badge">{totalCount}</span>
           </button>
           <Link href="/acuerdos/manage" className="deals-edit">
-            Modificar datos negocios
+            <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="edit" className="crm-icon" /></span><span>Modificar datos negocios</span>
           </Link>
           <Link href="/acuerdos/new" className="deals-add">Añadir</Link>
         </div>
