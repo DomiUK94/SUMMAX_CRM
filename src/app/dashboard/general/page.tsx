@@ -1,4 +1,5 @@
-import { AppShell } from "@/components/app-shell";
+﻿import { AppShell } from "@/components/app-shell";
+import { StaticTable } from "@/components/ui/static-table";
 import { getGlobalDashboardData } from "@/lib/db/dashboard";
 import { requireGlobalDashboardAccess } from "@/lib/auth/session";
 
@@ -7,55 +8,74 @@ export default async function GlobalDashboardPage() {
   const data = await getGlobalDashboardData();
 
   return (
-    <AppShell title="Dashboard General" subtitle="Vista ejecutiva y pendientes" canViewGlobal={user.can_view_global_dashboard}>
-      <div className="stats-grid">
-        <div className="card"><strong>{data.totals.investors}</strong><div className="muted">Fondos</div></div>
-        <div className="card"><strong>{data.totals.contacts}</strong><div className="muted">Contactos</div></div>
-        <div className="card"><strong>{data.totals.overdue}</strong><div className="muted">Pendientes vencidos</div></div>
-        <div className="card"><strong>{data.totals.meetings48h}</strong><div className="muted">Prox. 48h</div></div>
-      </div>
-
-      <div className="stack">
-        <div className="card">
-          <h3>Embudo por estado</h3>
-          <table>
-            <thead><tr><th>Estado</th><th>Total</th></tr></thead>
-            <tbody>
-              {data.byStatus.map((row) => (
-                <tr key={row.status}><td>{row.status}</td><td>{row.count}</td></tr>
-              ))}
-              {data.byStatus.length === 0 ? <tr><td colSpan={2}>Sin datos.</td></tr> : null}
-            </tbody>
-          </table>
+    <AppShell title="Dashboard General" subtitle="Vista ejecutiva y ritmo del equipo" canViewGlobal={user.can_view_global_dashboard}>
+      <section className="dashboard-hero">
+        <div className="card dashboard-highlight-card dashboard-highlight-card-warm">
+          <p className="workspace-kicker">Panorama</p>
+          <h2>Resumen ejecutivo del CRM</h2>
+          <p className="muted">Una lectura rápida del volumen, los pendientes y la actividad reciente del equipo.</p>
+          <div className="dashboard-highlight-metric">
+            <strong>{data.totals.contacts}</strong>
+            <span>contactos activos en seguimiento</span>
+          </div>
         </div>
 
-        <div className="card">
-          <h3>Importante: estado estancado</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>Contacto</th>
-                <th>Estado</th>
-                <th>Proxima accion</th>
-                <th>Vence</th>
-                <th>Owner</th>
-                <th>Ult. update</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.staleContacts.map((row) => (
-                <tr key={row.id}>
-                  <td>{row.full_name}</td>
-                  <td>{row.status_name ?? "-"}</td>
-                  <td>{row.next_step ?? "-"}</td>
-                  <td>{row.due_date ?? "-"}</td>
-                  <td>{row.owner_email ?? "-"}</td>
-                  <td>{new Date(row.updated_at).toLocaleDateString("es-ES")}</td>
-                </tr>
-              ))}
-              {data.staleContacts.length === 0 ? <tr><td colSpan={6}>No hay estancados.</td></tr> : null}
-            </tbody>
-          </table>
+        <div className="dashboard-kpi-grid">
+          <div className="card dashboard-kpi-card">
+            <span>Fondos</span>
+            <strong>{data.totals.investors}</strong>
+          </div>
+          <div className="card dashboard-kpi-card">
+            <span>Contactos</span>
+            <strong>{data.totals.contacts}</strong>
+          </div>
+          <div className="card dashboard-kpi-card dashboard-kpi-card-alert">
+            <span>Pendientes vencidos</span>
+            <strong>{data.totals.overdue}</strong>
+          </div>
+          <div className="card dashboard-kpi-card">
+            <span>Próx. 48h</span>
+            <strong>{data.totals.meetings48h}</strong>
+          </div>
+        </div>
+      </section>
+
+      <div className="dashboard-split-grid">
+        <div className="card dashboard-table-card">
+          <div className="dashboard-section-head">
+            <div>
+              <p className="workspace-kicker">Distribución</p>
+              <h3>Pipeline por estado</h3>
+            </div>
+          </div>
+          <StaticTable
+            columns={["Estado", "Total"]}
+            rows={data.byStatus.map((row) => [row.status, String(row.count)])}
+            emptyLabel="Sin datos."
+            emptyHint="Todavía no hay volumen suficiente para dibujar el embudo por estado."
+          />
+        </div>
+
+        <div className="card dashboard-table-card">
+          <div className="dashboard-section-head">
+            <div>
+              <p className="workspace-kicker">Alerta</p>
+              <h3>Seguimiento bloqueado</h3>
+            </div>
+          </div>
+          <StaticTable
+            columns={["Contacto", "Estado", "Próxima acción", "Vence", "Owner", "Últ. update"]}
+            rows={data.staleContacts.map((row) => [
+              row.full_name,
+              row.status_name ?? "-",
+              row.next_step ?? "-",
+              row.due_date ?? "-",
+              row.owner_email ?? "-",
+              new Date(row.updated_at).toLocaleDateString("es-ES")
+            ])}
+            emptyLabel="No hay estancados."
+            emptyHint="No hay contactos con señales de bloqueo o seguimiento vencido en este momento."
+          />
         </div>
       </div>
     </AppShell>

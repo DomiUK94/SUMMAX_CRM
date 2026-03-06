@@ -1,9 +1,14 @@
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { requireUser } from "@/lib/auth/session";
+import { canManageUsers } from "@/lib/auth/permissions";
+import { redirect } from "next/navigation";
 
 export default async function ExportsPage() {
   const user = await requireUser();
+  if (!canManageUsers(user)) {
+    redirect("/forbidden");
+  }
 
   return (
     <AppShell title="Exportaciones" subtitle="CSV general y detallado" canViewGlobal={user.can_view_global_dashboard}>

@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { StaticTable } from "@/components/ui/static-table";
 import { requireUser } from "@/lib/auth/session";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
@@ -7,6 +8,13 @@ function parseAmount(input: string | null): number {
   const cleaned = input.replace(/[^\d.,-]/g, "").replace(/\./g, "").replace(",", ".");
   const n = Number(cleaned);
   return Number.isFinite(n) ? n : 0;
+}
+
+function estimateAmount(min: number, max: number): number {
+  if (min > 0 && max > 0) return (min + max) / 2;
+  if (max > 0) return max;
+  if (min > 0) return min;
+  return 0;
 }
 
 export default async function ReporteFinanciacionPage() {
@@ -22,64 +30,41 @@ export default async function ReporteFinanciacionPage() {
   const rows = (data ?? []).map((r) => ({
     ...r,
     min_num: parseAmount(r.inversion_minima),
-    max_num: parseAmount(r.inversion_maxima)
+    max_num: parseAmount(r.inversion_maxima),
+    estimated_num: estimateAmount(parseAmount(r.inversion_minima), parseAmount(r.inversion_maxima))
   }));
 
-  const totalMin = rows.reduce((acc, r) => acc + r.min_num, 0);
-  const totalMax = rows.reduce((acc, r) => acc + r.max_num, 0);
+  const totalEstimated = rows.reduce((acc, r) => acc + r.estimated_num, 0);
 
   return (
-    <AppShell title="Reporte financiacion" subtitle="Resumen economico de negocios por cuenta" canViewGlobal={user.can_view_global_dashboard}>
+    <AppShell title="Reporte financiación" subtitle="Resumen económico de negocios por cuenta" canViewGlobal={user.can_view_global_dashboard}>
       <div className="stats-grid">
         <div className="card">
           <strong>{rows.length}</strong>
           <div className="muted">Cuentas analizadas</div>
         </div>
         <div className="card">
-          <strong>{totalMin.toLocaleString("es-ES")}</strong>
-          <div className="muted">Suma inversion minima</div>
-        </div>
-        <div className="card">
-          <strong>{totalMax.toLocaleString("es-ES")}</strong>
-          <div className="muted">Suma inversion maxima</div>
-        </div>
-        <div className="card">
-          <strong>{(totalMax - totalMin).toLocaleString("es-ES")}</strong>
-          <div className="muted">Rango total estimado</div>
+          <strong>{totalEstimated.toLocaleString("es-ES", { maximumFractionDigits: 0 })}</strong>
+          <div className="muted">Monto estimado total</div>
         </div>
       </div>
 
       <div className="card">
-        <table>
-          <thead>
-            <tr>
-              <th>Company ID</th>
-              <th>Cuenta</th>
-              <th>Vertical</th>
-              <th>Prioridad</th>
-              <th>Inversion minima</th>
-              <th>Inversion maxima</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.company_id}>
-                <td>{r.company_id}</td>
-                <td>{r.compania}</td>
-                <td>{r.vertical ?? "-"}</td>
-                <td>{r.prioridad ?? "-"}</td>
-                <td>{r.inversion_minima ?? "-"}</td>
-                <td>{r.inversion_maxima ?? "-"}</td>
-              </tr>
-            ))}
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={6}>Sin datos de financiacion.</td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
+        <StaticTable
+          columns={["Company ID", "Cuenta", "Vertical", "Prioridad", "Inversión mínima", "Inversión máxima", "Monto estimado"]}
+          rows={rows.map((r) => [
+            String(r.company_id),
+            r.compania,
+            r.vertical ?? "-",
+            r.prioridad ?? "-",
+            r.inversion_minima ?? "-",
+            r.inversion_maxima ?? "-",
+            r.estimated_num > 0 ? r.estimated_num.toLocaleString("es-ES", { maximumFractionDigits: 0 }) : "-"
+          ])}
+          emptyLabel="Sin datos de financiación."
+        />
       </div>
     </AppShell>
   );
 }
+

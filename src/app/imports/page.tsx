@@ -1,13 +1,19 @@
 import { AppShell } from "@/components/app-shell";
+import { ImportJobsTable } from "@/components/import-jobs-table";
 import { requireUser } from "@/lib/auth/session";
+import { canManageUsers } from "@/lib/auth/permissions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { redirect } from "next/navigation";
 
 export default async function ImportsPage() {
   const user = await requireUser();
+  if (!canManageUsers(user)) {
+    redirect("/forbidden");
+  }
   const supabase = createSupabaseServerClient();
   const { data: jobs } = await supabase
     .from("import_batches")
-    .select("id, source_type, filename, status, inserted_count, merged_count, warning_count, error_count, created_at")
+    .select("id, source_type, filename, status, inserted_count, merged_count, warning_count, error_count, summary_json, created_at")
     .order("created_at", { ascending: false })
     .limit(30);
 
@@ -21,29 +27,8 @@ export default async function ImportsPage() {
             <button type="submit">Subir y procesar</button>
           </form>
         </div>
-
         <div className="card">
-          <h3>Historial</h3>
-          <table>
-            <thead>
-              <tr><th>Fecha</th><th>Tipo</th><th>Archivo</th><th>Estado</th><th>Inserted</th><th>Merged</th><th>Warnings</th><th>Errors</th></tr>
-            </thead>
-            <tbody>
-              {(jobs ?? []).map((j) => (
-                <tr key={j.id}>
-                  <td>{new Date(j.created_at).toLocaleString("es-ES")}</td>
-                  <td>{j.source_type}</td>
-                  <td>{j.filename}</td>
-                  <td>{j.status}</td>
-                  <td>{j.inserted_count}</td>
-                  <td>{j.merged_count}</td>
-                  <td>{j.warning_count}</td>
-                  <td>{j.error_count}</td>
-                </tr>
-              ))}
-              {(jobs ?? []).length === 0 ? <tr><td colSpan={8}>Sin importaciones todavia.</td></tr> : null}
-            </tbody>
-          </table>
+          <ImportJobsTable initialJobs={jobs ?? []} />
         </div>
       </div>
     </AppShell>

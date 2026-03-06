@@ -1,6 +1,7 @@
-import { revalidatePath } from "next/cache";
+﻿import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { StaticTable } from "@/components/ui/static-table";
 import { requireUser } from "@/lib/auth/session";
 import { canManageCrmBulkEdits } from "@/lib/auth/permissions";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
@@ -84,97 +85,99 @@ export default async function ManageContactsPage({ searchParams }: SearchProps) 
   ]);
 
   return (
-    <AppShell title="Modificar datos contactos" subtitle="Edicion masiva" canViewGlobal={user.can_view_global_dashboard}>
-      <div className="card">
-        {searchParams?.ok === "1" ? <p style={{ color: "#0f766e" }}>Cambios guardados correctamente.</p> : null}
-        {searchParams?.error ? <p style={{ color: "#b91c1c" }}>Error: {searchParams.error}</p> : null}
-
-        <form method="get" className="entity-toolbar" style={{ marginBottom: 12 }}>
-          <input
-            className="toolbar-search"
-            name="q"
-            defaultValue={q}
-            placeholder="Filtra contactos por cualquier campo visible"
-          />
-          <button type="submit">Filtrar</button>
-          {q ? (
-            <a href="/contacts/manage" className="contacts-tab">
-              Limpiar
-            </a>
-          ) : null}
-        </form>
-
-        <form action={updateContactsBulkAction} className="stack">
-          <div className="row" style={{ justifyContent: "flex-end" }}>
-            <button type="submit">Guardar cambios masivos</button>
+    <AppShell title="Edici\u00f3n de contactos" subtitle="Revisi\u00f3n masiva con el mismo acabado que el CRM" canViewGlobal={user.can_view_global_dashboard}>
+      <div className="editor-shell">
+        <section className="card editor-hero">
+          <div>
+            <p className="workspace-kicker">Operativa</p>
+            <h2>Actualiza contactos sin salir del flujo principal</h2>
+            <p className="muted">
+              Revisa propietarios, prioridad y datos base en una sola mesa de trabajo. La vista mantiene el tono del CRM y evita la sensaci\u00f3n de backoffice crudo.
+            </p>
           </div>
-
-          <div className="contacts-table-wrap">
-            <table className="contacts-crm-table">
-              <thead>
-                <tr>
-                  <th>Nombre contacto</th>
-                  <th>Compania</th>
-                  <th>Email</th>
-                  <th>Telefono</th>
-                  <th>Rol</th>
-                  <th>Prioridad</th>
-                  <th>Owner</th>
-                  <th>Comentarios</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(contacts ?? []).map((c) => {
-                  const id = String(c.contact_id);
-                  return (
-                    <tr key={id}>
-                      <td>
-                        <input type="hidden" name="contact_ids" value={id} />
-                        <input name={`full_name_${id}`} defaultValue={c.persona_contacto ?? ""} />
-                      </td>
-                      <td>{c.compania ?? "-"}</td>
-                      <td><input name={`email_${id}`} defaultValue={c.email ?? ""} /></td>
-                      <td><input name={`phone_${id}`} defaultValue={c.telefono ?? ""} /></td>
-                      <td><input name={`role_${id}`} defaultValue={c.rol ?? ""} /></td>
-                      <td>
-                        <select name={`status_name_${id}`} defaultValue={c.prioritario ?? ""}>
-                          <option value="">--</option>
-                          <option value="Alta">Alta</option>
-                          <option value="Media">Media</option>
-                          <option value="Baja">Baja</option>
-                          <option value="Pendiente de contactar">Pendiente de contactar</option>
-                          <option value="En contacto">En contacto</option>
-                          <option value="NDA en curso">NDA en curso</option>
-                          <option value="Revision financiera">Revision financiera</option>
-                          <option value="Interes confirmado">Interes confirmado</option>
-                          <option value="Contrato en curso">Contrato en curso</option>
-                          <option value="Cerrado">Cerrado</option>
-                          <option value="Descartado">Descartado</option>
-                        </select>
-                      </td>
-                      <td>
-                        <select name={`owner_user_id_${id}`} defaultValue={c.owner_user_id ?? ""}>
-                          <option value="">Sin owner</option>
-                          {(owners ?? []).map((o) => (
-                            <option key={o.id} value={o.id}>
-                              {o.full_name?.trim() || o.email}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td><input name={`comments_${id}`} defaultValue={c.comentarios ?? ""} /></td>
-                    </tr>
-                  );
-                })}
-                {(contacts ?? []).length === 0 ? (
-                  <tr>
-                    <td colSpan={8}>Sin contactos.</td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
+          <div className="editor-hero-metrics">
+            <div className="editor-hero-metric">
+              <strong>{contacts?.length ?? 0}</strong>
+              <span>contactos cargados</span>
+            </div>
+            <div className="editor-hero-metric">
+              <strong>{owners?.length ?? 0}</strong>
+              <span>owners activos</span>
+            </div>
           </div>
-        </form>
+        </section>
+
+        {searchParams?.ok === "1" ? <div className="notice notice-success">Cambios guardados correctamente.</div> : null}
+        {searchParams?.error ? <div className="notice notice-error">Error: {searchParams.error}</div> : null}
+
+        <section className="card editor-card">
+          <div className="table-card-head">
+            <div>
+              <p className="workspace-kicker">Filtrado</p>
+              <h3>Buscar tramo de trabajo</h3>
+              <p className="muted">Reduce la tabla antes de editar para trabajar con un bloque m\u00e1s claro y controlado.</p>
+            </div>
+          </div>
+          <form method="get" className="entity-toolbar form-toolbar-surface">
+            <input className="toolbar-search" name="q" defaultValue={q} placeholder="Buscar por nombre, compa\u00f1\u00eda, email o comentario" />
+            <button type="submit">Aplicar</button>
+            {q ? <a href="/contacts/manage" className="contacts-tab">Limpiar</a> : null}
+          </form>
+        </section>
+
+        <section className="card editor-card">
+          <form action={updateContactsBulkAction} className="editor-stack">
+            <div className="form-actions-bar">
+              <div>
+                <p className="workspace-kicker">Edici\u00f3n masiva</p>
+                <h3>Tabla editable</h3>
+              </div>
+              <button type="submit">Guardar cambios</button>
+            </div>
+
+            <StaticTable
+              columns={["Nombre", "Compa\u00f1\u00eda", "Email", "Tel\u00e9fono", "Rol", "Prioridad", "Responsable", "Comentarios"]}
+              rows={(contacts ?? []).map((c) => {
+                const id = String(c.contact_id);
+                return [
+                  <>
+                    <input type="hidden" name="contact_ids" value={id} />
+                    <input name={`full_name_${id}`} defaultValue={c.persona_contacto ?? ""} />
+                  </>,
+                  c.compania ?? "-",
+                  <input name={`email_${id}`} defaultValue={c.email ?? ""} />,
+                  <input name={`phone_${id}`} defaultValue={c.telefono ?? ""} />,
+                  <input name={`role_${id}`} defaultValue={c.rol ?? ""} />,
+                  <select name={`status_name_${id}`} defaultValue={c.prioritario ?? ""}>
+                    <option value="">--</option>
+                    <option value="Alta">Alta</option>
+                    <option value="Media">Media</option>
+                    <option value="Baja">Baja</option>
+                    <option value="Pendiente de contactar">Pendiente de contactar</option>
+                    <option value="En contacto">En contacto</option>
+                    <option value="NDA en curso">NDA en curso</option>
+                    <option value="Revision financiera">Revision financiera</option>
+                    <option value="Interes confirmado">Interes confirmado</option>
+                    <option value="Contrato en curso">Contrato en curso</option>
+                    <option value="Cerrado">Cerrado</option>
+                    <option value="Descartado">Descartado</option>
+                  </select>,
+                  <select name={`owner_user_id_${id}`} defaultValue={c.owner_user_id ?? ""}>
+                    <option value="">Sin responsable</option>
+                    {(owners ?? []).map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.full_name?.trim() || o.email}
+                      </option>
+                    ))}
+                  </select>,
+                  <input name={`comments_${id}`} defaultValue={c.comentarios ?? ""} />
+                ];
+              })}
+              emptyLabel="Sin contactos."
+              emptyHint="Ajusta la b\u00fasqueda o vuelve cuando haya registros disponibles para revisar."
+            />
+          </form>
+        </section>
       </div>
     </AppShell>
   );

@@ -1,4 +1,5 @@
 ﻿import Link from "next/link";
+import * as Tabs from "@radix-ui/react-tabs";
 import { revalidatePath } from "next/cache";
 import { AppShell } from "@/components/app-shell";
 import { requireUser } from "@/lib/auth/session";
@@ -9,8 +10,8 @@ const STATUS_OPTIONS = [
   "Pendiente de contactar",
   "En contacto",
   "NDA en curso",
-  "RevisiÃ³n financiera",
-  "InterÃ©s confirmado",
+  "Revisión financiera",
+  "Interés confirmado",
   "Contrato en curso",
   "Cerrado",
   "Descartado"
@@ -86,6 +87,12 @@ export default async function ContactDetailPage({ params }: { params: { id: stri
     .map((part: string) => part[0]?.toUpperCase() ?? "")
     .join("");
 
+  const activities = activitiesRes.data ?? [];
+  const deals = dealsRes.data ?? [];
+  const tags = tagLinksRes.data ?? [];
+  const auditRows = auditRes.data ?? [];
+  const lastCommentAt = data.comments.length > 0 ? new Date(data.comments[0].created_at).toLocaleString("es-ES") : null;
+
   return (
     <AppShell title="Contactos" subtitle="Ficha de contacto" canViewGlobal={user.can_view_global_dashboard}>
       <div className="contact-detail-layout contact-detail-pro">
@@ -93,13 +100,33 @@ export default async function ContactDetailPage({ params }: { params: { id: stri
           <Link href="/contacts" className="contact-back">
             Contactos
           </Link>
+
           <div className="contact-head">
             <div className="contact-avatar">{initials || "C"}</div>
             <div>
               <h2>{data.contact.full_name}</h2>
-              <p className="muted">{data.contact.investor_name ?? "Sin compaÃ±Ã­a"}</p>
-              <p>{data.contact.email ?? "-"}</p>
+              <p className="muted">{data.contact.investor_name ?? "Sin compañía"}</p>
+              <p>{data.contact.email ?? "Sin email"}</p>
             </div>
+          </div>
+
+          <div className="contact-summary-grid">
+            <article className="contact-summary-card">
+              <strong>{activities.length}</strong>
+              <span>Actividades</span>
+            </article>
+            <article className="contact-summary-card">
+              <strong>{deals.length}</strong>
+              <span>Negocios</span>
+            </article>
+            <article className="contact-summary-card">
+              <strong>{tags.length}</strong>
+              <span>Etiquetas</span>
+            </article>
+            <article className="contact-summary-card">
+              <strong>{auditRows.length}</strong>
+              <span>Cambios</span>
+            </article>
           </div>
 
           <div className="contact-quick-actions">
@@ -117,93 +144,116 @@ export default async function ContactDetailPage({ params }: { params: { id: stri
             </Link>
           </div>
 
-          <div className="stack">
-            <h3>InformaciÃ³n clave</h3>
-            <p><strong>Correo:</strong> {data.contact.email ?? "-"}</p>
-            <p><strong>TelÃ©fono:</strong> {data.contact.phone ?? "-"}</p>
-            <p><strong>CompaÃ±Ã­a:</strong> {data.contact.investor_name ?? "-"}</p>
-            <p><strong>Estado:</strong> {data.contact.status_name ?? "-"}</p>
+          <div className="contact-meta-list stack">
+            <h3>Información clave</h3>
+            <div className="contact-meta-row"><span>Correo</span><strong>{data.contact.email ?? "-"}</strong></div>
+            <div className="contact-meta-row"><span>Teléfono</span><strong>{data.contact.phone ?? "-"}</strong></div>
+            <div className="contact-meta-row"><span>Compañía</span><strong>{data.contact.investor_name ?? "-"}</strong></div>
+            <div className="contact-meta-row"><span>Estado</span><strong>{data.contact.status_name ?? "-"}</strong></div>
+            <div className="contact-meta-row"><span>Última nota</span><strong>{lastCommentAt ?? "Sin actividad"}</strong></div>
           </div>
         </aside>
 
         <section className="contact-center contact-pane contact-pane-2">
-          <div className="card contact-tabs contact-surface">
-            <button className="contact-tab contact-tab-active">InformaciÃ³n</button>
-            <button className="contact-tab">Actividades</button>
-            <button className="contact-tab">Ingresos</button>
-            <button className="contact-tab">InformaciÃ³n avanzada</button>
-          </div>
+          <Tabs.Root defaultValue="overview" className="contact-radix-tabs">
+            <Tabs.List className="card contact-tabs contact-surface" aria-label="Secciones del contacto">
+              <Tabs.Trigger value="overview" className="contact-tab">Resumen</Tabs.Trigger>
+              <Tabs.Trigger value="activity" className="contact-tab">Seguimiento</Tabs.Trigger>
+              <Tabs.Trigger value="notes" className="contact-tab">Notas</Tabs.Trigger>
+              <Tabs.Trigger value="advanced" className="contact-tab">Auditoría</Tabs.Trigger>
+            </Tabs.List>
 
-          <div className="card contact-surface">
-            <h3>Ãšltima actividad registrada</h3>
-            <p className="muted">
-              {data.comments.length > 0
-                ? `Actualizado ${new Date(data.comments[0].created_at).toLocaleString("es-ES")}`
-                : "TodavÃ­a no hay actividad registrada para este contacto."}
-            </p>
-            <div className="contact-comment-list">
-              {data.comments.slice(0, 4).map((c) => (
-                <article key={c.id} className="contact-comment-item">
-                  <div className="muted">
-                    {c.created_by_email} Â· {new Date(c.created_at).toLocaleString("es-ES")}
-                  </div>
-                  <p>{c.body}</p>
-                </article>
-              ))}
-              {data.comments.length === 0 ? <div className="muted">Sin comentarios todavÃ­a.</div> : null}
-            </div>
-          </div>
+            <Tabs.Content value="overview" className="contact-tab-panel stack">
+              <div className="card contact-surface contact-hero-card">
+                <div>
+                  <p className="workspace-kicker">Resumen</p>
+                  <h3>Vista operativa del contacto</h3>
+                  <p className="muted">
+                    {lastCommentAt
+                      ? `Última interacción registrada el ${lastCommentAt}.`
+                      : "Aún no hay comentarios o actividad manual registrada para este contacto."}
+                  </p>
+                </div>
+                <div className="contact-inline-chips">
+                  <span className="contact-inline-chip">{data.contact.status_name ?? "Sin estado"}</span>
+                  <span className="contact-inline-chip contact-inline-chip-soft">{data.contact.investor_name ?? "Sin cuenta"}</span>
+                </div>
+              </div>
 
-          <div className="card contact-surface">
-            <h3>Actualizar estado y acciÃ³n</h3>
-            <form action={changeStatusAction} className="stack">
-              <select name="to_status_name" defaultValue={data.contact.status_name ?? "Pendiente de contactar"}>
-                {STATUS_OPTIONS.map((status) => (
-                  <option key={status} value={status}>
-                    {status}
-                  </option>
-                ))}
-              </select>
-              <input type="date" name="follow_up_date" required />
-              <textarea name="note" rows={3} placeholder="Describe el siguiente paso o actualizaciÃ³n" />
-              <button type="submit">Guardar actualizaciÃ³n</button>
-            </form>
-          </div>
+              <div className="card contact-surface">
+                <h3>Última actividad registrada</h3>
+                <div className="contact-comment-list">
+                  {data.comments.slice(0, 4).map((c) => (
+                    <article key={c.id} className="contact-comment-item">
+                      <div className="muted">
+                        {c.created_by_email} · {new Date(c.created_at).toLocaleString("es-ES")}
+                      </div>
+                      <p>{c.body}</p>
+                    </article>
+                  ))}
+                  {data.comments.length === 0 ? <div className="muted">Sin comentarios todavía.</div> : null}
+                </div>
+              </div>
+            </Tabs.Content>
 
-          <div className="card contact-surface">
-            <h3>Nueva nota</h3>
-            <form action={addCommentAction} className="stack">
-              <textarea name="body" rows={4} placeholder="AÃ±adir comentario..." />
-              <button type="submit">Guardar nota</button>
-            </form>
-          </div>
+            <Tabs.Content value="activity" className="contact-tab-panel stack">
+              <div className="card contact-surface">
+                <h3>Actualizar estado y próxima acción</h3>
+                <form action={changeStatusAction} className="stack">
+                  <select name="to_status_name" defaultValue={data.contact.status_name ?? "Pendiente de contactar"}>
+                    {STATUS_OPTIONS.map((status) => (
+                      <option key={status} value={status}>
+                        {status}
+                      </option>
+                    ))}
+                  </select>
+                  <input type="date" name="follow_up_date" required />
+                  <textarea name="note" rows={3} placeholder="Describe el siguiente paso o actualización" />
+                  <button type="submit">Guardar actualización</button>
+                </form>
+              </div>
+            </Tabs.Content>
 
-          <div className="card contact-surface">
-            <h3>Auditoria de cambios</h3>
-            <div className="stack">
-              {(auditRes.data ?? []).map((row) => (
-                <p key={row.id} className="muted">
-                  {new Date(row.changed_at).toLocaleString("es-ES")} | {row.changed_by_email} | {row.action} |{" "}
-                  {row.field ?? "general"}: {row.old_value ?? "--"} {"->"} {row.new_value ?? "--"}
-                </p>
-              ))}
-              {(auditRes.data ?? []).length === 0 ? <p className="muted">Sin cambios auditados.</p> : null}
-            </div>
-          </div>
+            <Tabs.Content value="notes" className="contact-tab-panel stack">
+              <div className="card contact-surface">
+                <h3>Nueva nota</h3>
+                <form action={addCommentAction} className="stack">
+                  <textarea name="body" rows={4} placeholder="Añadir comentario..." />
+                  <button type="submit">Guardar nota</button>
+                </form>
+              </div>
+            </Tabs.Content>
+
+            <Tabs.Content value="advanced" className="contact-tab-panel stack">
+              <div className="card contact-surface">
+                <h3>Auditoría de cambios</h3>
+                <div className="stack">
+                  {auditRows.map((row) => (
+                    <div key={row.id} className="contact-audit-item">
+                      <strong>{row.field ?? "general"}</strong>
+                      <p className="muted">{new Date(row.changed_at).toLocaleString("es-ES")} · {row.changed_by_email} · {row.action}</p>
+                      <p>{row.old_value ?? "--"} {"->"} {row.new_value ?? "--"}</p>
+                    </div>
+                  ))}
+                  {auditRows.length === 0 ? <p className="muted">Sin cambios auditados.</p> : null}
+                </div>
+              </div>
+            </Tabs.Content>
+          </Tabs.Root>
         </section>
 
         <aside className="contact-right contact-pane contact-pane-3">
-          <div className="card contact-surface">
+          <div className="card contact-surface contact-side-card">
             <div className="row">
-              <h3 style={{ margin: 0 }}>Empresas</h3>
+              <h3 style={{ margin: 0 }}>Empresa</h3>
               <Link href="/investors" className="quick-link-add">
-                Agregar
+                Ver cuentas
               </Link>
             </div>
             <p>{data.contact.investor_name ?? "Sin empresa asociada"}</p>
           </div>
 
-          <div className="card contact-surface">
+          <div className="card contact-surface contact-side-card">
             <div className="row">
               <h3 style={{ margin: 0 }}>Negocios</h3>
               <Link
@@ -213,17 +263,20 @@ export default async function ContactDetailPage({ params }: { params: { id: stri
                 Agregar
               </Link>
             </div>
-            <p className="muted">Asocia un negocio para esta cuenta desde aquÃ­.</p>
-            <div className="stack">
-              {(dealsRes.data ?? []).map((deal) => (
-                <p key={deal.company_id} className="muted">
-                  {deal.compania} | {deal.prioridad ?? "--"} | {deal.inversion_maxima ?? "--"}
-                </p>
+            <p className="muted">Asocia un negocio para esta cuenta desde aquí.</p>
+            <div className="contact-side-list stack">
+              {deals.map((deal) => (
+                <div key={deal.company_id} className="contact-side-item">
+                  <strong>{deal.compania}</strong>
+                  <span>{deal.prioridad ?? "--"}</span>
+                  <span>{deal.inversion_maxima ?? "--"}</span>
+                </div>
               ))}
+              {deals.length === 0 ? <p className="muted">Sin negocios asociados.</p> : null}
             </div>
           </div>
 
-          <div className="card contact-surface">
+          <div className="card contact-surface contact-side-card">
             <div className="row">
               <h3 style={{ margin: 0 }}>Etiquetas</h3>
               <form action="/api/tags/link" method="post" className="row" style={{ gap: 6 }}>
@@ -240,33 +293,30 @@ export default async function ContactDetailPage({ params }: { params: { id: stri
               </form>
             </div>
             <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-              {(tagLinksRes.data ?? []).map((row) => (
+              {tags.map((row) => (
                 <span
                   key={row.tag_id}
-                  style={{
-                    background: String((row.tags as { color?: string } | null)?.color ?? "#0f97af"),
-                    color: "#fff",
-                    borderRadius: 999,
-                    padding: "4px 10px",
-                    fontSize: 12
-                  }}
+                  className="contact-tag"
+                  style={{ background: String((row.tags as { color?: string } | null)?.color ?? "#0f97af") }}
                 >
                   {(row.tags as { name?: string } | null)?.name ?? "Tag"}
                 </span>
               ))}
+              {tags.length === 0 ? <p className="muted">Sin etiquetas todavía.</p> : null}
             </div>
           </div>
 
-          <div className="card contact-surface">
+          <div className="card contact-surface contact-side-card">
             <h3 style={{ marginTop: 0 }}>Actividades relacionadas</h3>
-            <div className="stack">
-              {(activitiesRes.data ?? []).map((activity) => (
-                <p key={activity.id} className="muted">
-                  {activity.title ?? "(sin titulo)"} | {activity.activity_type ?? "--"} |{" "}
-                  {activity.occurred_at ? new Date(activity.occurred_at).toLocaleString("es-ES") : "--"}
-                </p>
+            <div className="contact-side-list stack">
+              {activities.map((activity) => (
+                <div key={activity.id} className="contact-side-item">
+                  <strong>{activity.title ?? "(sin título)"}</strong>
+                  <span>{activity.activity_type ?? "--"}</span>
+                  <span>{activity.occurred_at ? new Date(activity.occurred_at).toLocaleString("es-ES") : "--"}</span>
+                </div>
               ))}
-              {(activitiesRes.data ?? []).length === 0 ? <p className="muted">Sin actividades relacionadas.</p> : null}
+              {activities.length === 0 ? <p className="muted">Sin actividades relacionadas.</p> : null}
             </div>
           </div>
         </aside>
@@ -274,4 +324,3 @@ export default async function ContactDetailPage({ params }: { params: { id: stri
     </AppShell>
   );
 }
-

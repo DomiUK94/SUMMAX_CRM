@@ -1,6 +1,7 @@
-import { revalidatePath } from "next/cache";
+﻿import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { StaticTable } from "@/components/ui/static-table";
 import { canAccessUsersProvisioning, canManageUsers } from "@/lib/auth/permissions";
 import { requireUser } from "@/lib/auth/session";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -17,7 +18,6 @@ type SearchProps = {
 export default async function UsuariosPage({ searchParams }: SearchProps) {
   const user = await requireUser();
   const isAdmin = canManageUsers(user);
-  const isManager = user.role === "manager";
   if (!canAccessUsersProvisioning(user)) {
     return (
       <AppShell title="Usuarios" canViewGlobal={user.can_view_global_dashboard}>
@@ -176,99 +176,143 @@ export default async function UsuariosPage({ searchParams }: SearchProps) {
     .sort((a, b) => a.email.localeCompare(b.email, "es"));
 
   return (
-    <AppShell title="Usuarios" subtitle="Alta y permisos CRM" canViewGlobal={user.can_view_global_dashboard}>
-      <div className="stack">
-        <div className="card">
-          <h3>Crear nuevo usuario</h3>
-          {searchParams?.ok === "user_created" ? <p style={{ color: "#0f766e" }}>Usuario creado correctamente.</p> : null}
-          {searchParams?.ok === "user_linked" ? <p style={{ color: "#0f766e" }}>Usuario de Auth agregado a CRM.</p> : null}
-          {searchParams?.error ? <p style={{ color: "#b91c1c" }}>Error: {searchParams.error}</p> : null}
-          <form action={createUserAction} className="stack" style={{ maxWidth: 720 }}>
-            <div className="row" style={{ gap: 10, justifyContent: "start" }}>
-              <input name="email" type="email" required placeholder="email@empresa.com" style={{ width: 280 }} />
-              <input name="password" type="password" required placeholder="Password temporal" style={{ width: 220 }} />
-              <input name="full_name" placeholder="Nombre completo" style={{ width: 220 }} />
+    <AppShell title="Usuarios" subtitle="Altas, permisos y vinculaci\u00f3n con una capa visual consistente" canViewGlobal={user.can_view_global_dashboard}>
+      <div className="editor-shell">
+        <section className="card editor-hero">
+          <div>
+            <p className="workspace-kicker">Acceso CRM</p>
+            <h2>Gestiona altas y permisos sin salir del mismo lenguaje visual</h2>
+            <p className="muted">
+              Esta vista deja de sentirse como una consola aparte: altas nuevas, usuarios existentes y permisos comparten jerarqu\u00eda, espaciado y acabados del resto del producto.
+            </p>
+          </div>
+          <div className="editor-hero-metrics">
+            <div className="editor-hero-metric">
+              <strong>{users?.length ?? 0}</strong>
+              <span>usuarios CRM</span>
             </div>
-            <div className="row" style={{ gap: 10, justifyContent: "start" }}>
+            <div className="editor-hero-metric">
+              <strong>{publicNotInCrm.length}</strong>
+              <span>pendientes de vincular</span>
+            </div>
+          </div>
+        </section>
+
+        {searchParams?.ok === "user_created" ? <div className="notice notice-success">Usuario creado correctamente.</div> : null}
+        {searchParams?.ok === "user_linked" ? <div className="notice notice-success">Usuario de Auth agregado a CRM.</div> : null}
+        {searchParams?.error ? <div className="notice notice-error">Error: {searchParams.error}</div> : null}
+
+        <section className="editor-grid-two">
+          <div className="card editor-card">
+            <div className="table-card-head">
+              <div>
+                <p className="workspace-kicker">Alta nueva</p>
+                <h3>Crear usuario</h3>
+                <p className="muted">Abre una cuenta nueva con rol y acceso alineados a tu nivel de permisos.</p>
+              </div>
+            </div>
+            <form action={createUserAction} className="editor-stack">
+              <div className="editor-form-grid editor-form-grid-3">
+                <label className="form-field">
+                  <span>Email</span>
+                  <input name="email" type="email" required placeholder="email@empresa.com" />
+                </label>
+                <label className="form-field">
+                  <span>Password temporal</span>
+                  <input name="password" type="password" required placeholder="Temporal y segura" />
+                </label>
+                <label className="form-field">
+                  <span>Nombre completo</span>
+                  <input name="full_name" placeholder="Nombre completo" />
+                </label>
+              </div>
+
               {isAdmin ? (
-                <>
-                  <label>
-                    Rol
+                <div className="editor-form-grid editor-form-grid-3">
+                  <label className="form-field">
+                    <span>Rol</span>
                     <select name="role" defaultValue="user">
                       <option value="user">user</option>
                       <option value="manager">manager</option>
                       <option value="admin">admin</option>
                     </select>
                   </label>
-                  <label>
-                    Activo
+                  <label className="form-field">
+                    <span>Activo</span>
                     <select name="is_active" defaultValue="true">
-                      <option value="true">Si</option>
+                      <option value="true">S\u00ed</option>
                       <option value="false">No</option>
                     </select>
                   </label>
-                  <label>
-                    Dashboard global
+                  <label className="form-field">
+                    <span>Dashboard global</span>
                     <select name="can_view_global_dashboard" defaultValue="false">
                       <option value="false">No</option>
-                      <option value="true">Si</option>
+                      <option value="true">S\u00ed</option>
                     </select>
                   </label>
-                </>
+                </div>
               ) : (
                 <>
                   <input type="hidden" name="role" value="user" />
                   <input type="hidden" name="is_active" value="true" />
                   <input type="hidden" name="can_view_global_dashboard" value="false" />
-                  <p className="muted">Como manager, solo puedes crear cuentas de tipo user con acceso de vista.</p>
+                  <p className="muted">Como manager, solo puedes crear cuentas tipo user con acceso de vista.</p>
                 </>
               )}
-            </div>
-            <div>
-              <button type="submit">Crear usuario</button>
-            </div>
-          </form>
-        </div>
 
-        <div className="card">
-          <h3>Anadir usuario existente de Public Users</h3>
-          <form action={linkExistingAuthUserAction} className="stack" style={{ maxWidth: 720 }}>
-            <div className="row" style={{ gap: 10, justifyContent: "start" }}>
-              <select name="public_user_id" required style={{ minWidth: 380 }}>
-                <option value="">Selecciona usuario de Public Users...</option>
-                {publicNotInCrm.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.email}{u.full_name ? ` - ${u.full_name}` : ""}
-                  </option>
-                ))}
-              </select>
+              <div className="form-actions-bar form-actions-bar-start">
+                <button type="submit">Crear usuario</button>
+              </div>
+            </form>
+          </div>
+
+          <div className="card editor-card">
+            <div className="table-card-head">
+              <div>
+                <p className="workspace-kicker">Vinculaci\u00f3n</p>
+                <h3>A\u00f1adir usuario existente</h3>
+                <p className="muted">Trae usuarios ya creados en Public Users y dales rol dentro del CRM.</p>
+              </div>
             </div>
-            <div className="row" style={{ gap: 10, justifyContent: "start" }}>
+            <form action={linkExistingAuthUserAction} className="editor-stack">
+              <label className="form-field">
+                <span>Usuario de Public Users</span>
+                <select name="public_user_id" required>
+                  <option value="">Selecciona un usuario...</option>
+                  {publicNotInCrm.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.email}{u.full_name ? ` - ${u.full_name}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               {isAdmin ? (
-                <>
-                  <label>
-                    Rol
+                <div className="editor-form-grid editor-form-grid-3">
+                  <label className="form-field">
+                    <span>Rol</span>
                     <select name="role" defaultValue="user">
                       <option value="user">user</option>
                       <option value="manager">manager</option>
                       <option value="admin">admin</option>
                     </select>
                   </label>
-                  <label>
-                    Activo
+                  <label className="form-field">
+                    <span>Activo</span>
                     <select name="is_active" defaultValue="true">
-                      <option value="true">Si</option>
+                      <option value="true">S\u00ed</option>
                       <option value="false">No</option>
                     </select>
                   </label>
-                  <label>
-                    Dashboard global
+                  <label className="form-field">
+                    <span>Dashboard global</span>
                     <select name="can_view_global_dashboard" defaultValue="false">
                       <option value="false">No</option>
-                      <option value="true">Si</option>
+                      <option value="true">S\u00ed</option>
                     </select>
                   </label>
-                </>
+                </div>
               ) : (
                 <>
                   <input type="hidden" name="role" value="user" />
@@ -277,73 +321,57 @@ export default async function UsuariosPage({ searchParams }: SearchProps) {
                   <p className="muted">Como manager, el usuario se agrega como user con acceso de vista.</p>
                 </>
               )}
-            </div>
-            <div>
-              <button type="submit" disabled={publicNotInCrm.length === 0}>
-                Agregar desde Public Users
-              </button>
-            </div>
-            {publicNotInCrm.length === 0 ? (
-              <p className="muted">No hay usuarios en Public Users pendientes de agregar a CRM.</p>
-            ) : null}
-          </form>
-        </div>
 
-        <div className="card">
-          <h3>Usuarios CRM</h3>
-          {!isAdmin ? <p className="muted">Como manager tienes solo acceso de lectura en esta tabla.</p> : null}
-          <table>
-            <thead>
-              <tr>
-                <th>Email</th>
-                <th>Nombre</th>
-                <th>Rol</th>
-                <th>Activo</th>
-                <th>Dashboard global</th>
-                <th>Accion</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(users ?? []).map((u) => (
-                <tr key={u.id}>
-                  <td>{u.email}</td>
-                  <td>{u.full_name ?? "-"}</td>
-                  <td>{u.role}</td>
-                  <td>{u.is_active ? "Si" : "No"}</td>
-                  <td>{u.can_view_global_dashboard ? "Si" : "No"}</td>
-                  <td>
-                    {isAdmin ? (
-                      <form action={updateUserAction} className="row" style={{ justifyContent: "start", gap: 8 }}>
-                        <input type="hidden" name="target_id" value={u.id} />
-                        <select name="role" defaultValue={u.role}>
-                          <option value="user">user</option>
-                          <option value="manager">manager</option>
-                          <option value="admin">admin</option>
-                        </select>
-                        <select name="is_active" defaultValue={u.is_active ? "true" : "false"}>
-                          <option value="true">Activo</option>
-                          <option value="false">Inactivo</option>
-                        </select>
-                        <select name="can_view_global_dashboard" defaultValue={u.can_view_global_dashboard ? "true" : "false"}>
-                          <option value="false">Global: No</option>
-                          <option value="true">Global: Si</option>
-                        </select>
-                        <button type="submit">Guardar</button>
-                      </form>
-                    ) : (
-                      <span className="muted">Solo lectura</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {(users ?? []).length === 0 ? (
-                <tr>
-                  <td colSpan={6}>Sin usuarios CRM.</td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
+              <div className="form-actions-bar form-actions-bar-start">
+                <button type="submit" disabled={publicNotInCrm.length === 0}>Agregar desde Public Users</button>
+              </div>
+              {publicNotInCrm.length === 0 ? <p className="muted">No hay usuarios pendientes de agregar a CRM.</p> : null}
+            </form>
+          </div>
+        </section>
+
+        <section className="card editor-card">
+          <div className="form-actions-bar">
+            <div>
+              <p className="workspace-kicker">Permisos</p>
+              <h3>Usuarios CRM</h3>
+              {!isAdmin ? <p className="muted">Como manager tienes acceso de solo lectura en esta tabla.</p> : null}
+            </div>
+          </div>
+          <StaticTable
+            columns={["Email", "Nombre", "Rol", "Activo", "Dashboard global", "Acci\u00f3n"]}
+            rows={(users ?? []).map((u) => [
+              u.email,
+              u.full_name ?? "-",
+              u.role,
+              u.is_active ? "S\u00ed" : "No",
+              u.can_view_global_dashboard ? "S\u00ed" : "No",
+              isAdmin ? (
+                <form action={updateUserAction} className="inline-form-grid">
+                  <input type="hidden" name="target_id" value={u.id} />
+                  <select name="role" defaultValue={u.role}>
+                    <option value="user">user</option>
+                    <option value="manager">manager</option>
+                    <option value="admin">admin</option>
+                  </select>
+                  <select name="is_active" defaultValue={u.is_active ? "true" : "false"}>
+                    <option value="true">Activo</option>
+                    <option value="false">Inactivo</option>
+                  </select>
+                  <select name="can_view_global_dashboard" defaultValue={u.can_view_global_dashboard ? "true" : "false"}>
+                    <option value="false">Global: No</option>
+                    <option value="true">Global: S\u00ed</option>
+                  </select>
+                  <button type="submit">Guardar</button>
+                </form>
+              ) : (
+                <span className="muted">Solo lectura</span>
+              )
+            ])}
+            emptyLabel="Sin usuarios CRM."
+            emptyHint="Cuando se creen o vinculen usuarios aparecer\u00e1n aqu\u00ed con su configuraci\u00f3n."
+          />
+        </section>
       </div>
     </AppShell>
   );

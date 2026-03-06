@@ -1,6 +1,7 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { AppShell } from "@/components/app-shell";
+import { StaticTable } from "@/components/ui/static-table";
 import { requireUser } from "@/lib/auth/session";
 import { addComment, getInvestorById } from "@/lib/db/crm";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
@@ -44,12 +45,8 @@ export default async function InvestorDetailPage({ params }: { params: { id: str
           <div className="row" style={{ marginBottom: 8 }}>
             <h3 style={{ margin: 0 }}>Resumen</h3>
             <div className="row" style={{ gap: 8 }}>
-              <Link href={`/acuerdos/new?investor_id=${encodeURIComponent(params.id)}`} className="companies-tab">
-                Nuevo negocio
-              </Link>
-              <Link href={`/actividades/new?investor_id=${encodeURIComponent(params.id)}`} className="companies-tab">
-                Nueva actividad
-              </Link>
+              <Link href={`/acuerdos/new?investor_id=${encodeURIComponent(params.id)}`} className="companies-tab">Nuevo negocio</Link>
+              <Link href={`/actividades/new?investor_id=${encodeURIComponent(params.id)}`} className="companies-tab">Nueva actividad</Link>
             </div>
           </div>
           <p><strong>Categoría:</strong> {data.investor.category}</p>
@@ -60,21 +57,17 @@ export default async function InvestorDetailPage({ params }: { params: { id: str
 
         <div className="card">
           <h3>Contactos vinculados</h3>
-          <table>
-            <thead><tr><th>Nombre</th><th>Email</th><th>Estado</th></tr></thead>
-            <tbody>
-              {data.contacts.map((c) => (
-                <tr key={c.id}><td>{c.full_name}</td><td>{c.email ?? "-"}</td><td>{c.status_name ?? "-"}</td></tr>
-              ))}
-              {data.contacts.length === 0 ? <tr><td colSpan={3}>Sin contactos.</td></tr> : null}
-            </tbody>
-          </table>
+          <StaticTable
+            columns={["Nombre", "Email", "Estado"]}
+            rows={data.contacts.map((c) => [c.full_name, c.email ?? "-", c.status_name ?? "-"])}
+            emptyLabel="Sin contactos."
+          />
         </div>
 
         <div className="card">
           <h3>Comentarios</h3>
           <form action={addCommentAction} className="stack">
-            <textarea name="body" rows={4} placeholder="Añadir comentario..." />
+            <textarea name="body" rows={4} placeholder="A?adir comentario..." />
             <button type="submit">Guardar comentario</button>
           </form>
           <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "12px 0" }} />
@@ -93,10 +86,7 @@ export default async function InvestorDetailPage({ params }: { params: { id: str
           <h3>Actividades relacionadas</h3>
           <div className="stack">
             {(activitiesRes.data ?? []).map((activity) => (
-              <p key={activity.id}>
-                {activity.title ?? "(sin titulo)"} | {activity.activity_type ?? "--"} |{" "}
-                {activity.occurred_at ? new Date(activity.occurred_at).toLocaleString("es-ES") : "--"}
-              </p>
+              <p key={activity.id}>{activity.title ?? "(sin titulo)"} | {activity.activity_type ?? "--"} | {activity.occurred_at ? new Date(activity.occurred_at).toLocaleString("es-ES") : "--"}</p>
             ))}
             {(activitiesRes.data ?? []).length === 0 ? <p className="muted">Sin actividades relacionadas.</p> : null}
           </div>
@@ -106,10 +96,7 @@ export default async function InvestorDetailPage({ params }: { params: { id: str
           <h3>Auditoria de cambios</h3>
           <div className="stack">
             {(auditRes.data ?? []).map((row) => (
-              <p key={row.id} className="muted">
-                {new Date(row.changed_at).toLocaleString("es-ES")} | {row.changed_by_email} | {row.action} | {row.field ?? "general"}:{" "}
-                {row.old_value ?? "--"} {"->"} {row.new_value ?? "--"}
-              </p>
+              <p key={row.id} className="muted">{new Date(row.changed_at).toLocaleString("es-ES")} | {row.changed_by_email} | {row.action} | {row.field ?? "general"}: {row.old_value ?? "--"} {"->"} {row.new_value ?? "--"}</p>
             ))}
             {(auditRes.data ?? []).length === 0 ? <p className="muted">Sin cambios auditados.</p> : null}
           </div>
@@ -118,3 +105,4 @@ export default async function InvestorDetailPage({ params }: { params: { id: str
     </AppShell>
   );
 }
+

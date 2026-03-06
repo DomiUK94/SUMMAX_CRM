@@ -1,23 +1,41 @@
-"use client";
+﻿"use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import * as Dialog from "@radix-ui/react-dialog";
+import { getCoreRowModel, type ColumnDef, useReactTable } from "@tanstack/react-table";
+import { DataTable } from "@/components/ui/data-table";
+
+type DuplicateRecord = {
+  contact_id: number;
+  persona_contacto: string | null;
+  compania: string | null;
+  email: string | null;
+  telefono: string | null;
+  updated_at: string | null;
+};
 
 type DuplicateGroup = {
   rule: string;
-  records: Array<{
-    contact_id: number;
-    persona_contacto: string | null;
-    compania: string | null;
-    email: string | null;
-    telefono: string | null;
-    updated_at: string | null;
-  }>;
+  records: DuplicateRecord[];
 };
+
+type DuplicateTableRow = {
+  rowId: string;
+  rule: string;
+  record: DuplicateRecord;
+  targets: DuplicateRecord[];
+};
+
+type PendingMerge = {
+  keepId: number;
+  removeId: number;
+} | null;
 
 export function ContactsDuplicatesClient() {
   const [groups, setGroups] = useState<DuplicateGroup[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [pendingMerge, setPendingMerge] = useState<PendingMerge>(null);
 
   async function loadGroups() {
     setError(null);
@@ -51,60 +69,114 @@ export function ContactsDuplicatesClient() {
     }
     await loadGroups();
     setBusy(null);
+    setPendingMerge(null);
   }
 
+  const rows = useMemo<DuplicateTableRow[]>(
+    () =>
+      groups.flatMap((group) =>
+        group.records.map((record) => ({
+          rowId: `${group.rule}-${record.contact_id}`,
+          rule: group.rule,
+          record,
+          targets: group.records.filter((target) => target.contact_id !== record.contact_id)
+        }))
+      ),
+    [groups]
+  );
+
+  const columns = useMemo<ColumnDef<DuplicateTableRow>[]>(
+    () => [
+      { id: "rule", header: "Regla", cell: ({ row }) => row.original.rule },
+      { id: "contact_id", header: "ID", cell: ({ row }) => row.original.record.contact_id },
+      { id: "persona_contacto", header: "Nombre", cell: ({ row }) => row.original.record.persona_contacto ?? "--" },
+      { id: "compania", header: "Compañía", cell: ({ row }) => row.original.record.compania ?? "--" },
+      { id: "email", header: "Email", cell: ({ row }) => row.original.record.email ?? "--" },
+      { id: "telefono", header: "Teléfono", cell: ({ row }) => row.original.record.telefono ?? "--" },
+      {
+        id: "acciones",
+        header: "Acciones",
+        cell: ({ row }) => (
+          <div className="entity-toolbar-actions" style={{ marginLeft: 0, gap: 8, flexWrap: "wrap" }}>
+            {row.original.targets.map((target) => (
+              <button
+                key={`${row.original.record.contact_id}-${target.contact_id}`}
+                disabled={busy === `${target.contact_id}-${row.original.record.contact_id}`}
+                onClick={() => setPendingMerge({ keepId: target.contact_id, removeId: row.original.record.contact_id })}
+              >
+                Mantener {target.contact_id}
+              </button>
+            ))}
+          </div>
+        )
+      }
+    ],
+    [busy]
+  );
+
+  const table = useReactTable({ data: rows, columns, getRowId: (row) => row.rowId, getCoreRowModel: getCoreRowModel() });
+
   return (
-    <div className="stack">
-      <div className="card">
-        <h2 style={{ marginTop: 0 }}>Duplicados de contactos</h2>
-        <p className="muted">Reglas: email, telefono o nombre+compania coincidentes.</p>
-        <button onClick={() => void loadGroups()}>Refrescar</button>
-        {error ? <p style={{ color: "#b91c1c" }}>{error}</p> : null}
+    <>
+      <div className="stack">
+        <div className="card">
+          <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+            <div>
+              <h2 style={{ marginTop: 0, marginBottom: 6 }}>Duplicados de contactos</h2>
+              <p className="muted">Reglas: email, teléfono o nombre + compañía coincidentes.</p>
+            </div>
+            <button onClick={() => void loadGroups()}>Refrescar</button>
+          </div>
+          {error ? <p style={{ color: "#b91c1c" }}>{error}</p> : null}
+        </div>
+        <div className="card">
+          <DataTable
+            table={table}
+            emptyLabel="No se detectaron duplicados."
+            emptyHint="Cuando haya coincidencias por email, teléfono o nombre con compañía, aparecerán aquí para revisión."
+          />
+        </div>
       </div>
 
-      {(groups ?? []).map((group) => (
-        <div key={group.rule} className="card">
-          <h3 style={{ marginTop: 0 }}>{group.rule}</h3>
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Nombre</th>
-                <th>Compania</th>
-                <th>Email</th>
-                <th>Telefono</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {group.records.map((record) => (
-                <tr key={record.contact_id}>
-                  <td>{record.contact_id}</td>
-                  <td>{record.persona_contacto ?? "--"}</td>
-                  <td>{record.compania ?? "--"}</td>
-                  <td>{record.email ?? "--"}</td>
-                  <td>{record.telefono ?? "--"}</td>
-                  <td>
-                    {group.records
-                      .filter((target) => target.contact_id !== record.contact_id)
-                      .map((target) => (
-                        <button
-                          key={`${record.contact_id}-${target.contact_id}`}
-                          disabled={busy === `${target.contact_id}-${record.contact_id}`}
-                          onClick={() => void mergeContacts(target.contact_id, record.contact_id)}
-                        >
-                          Mantener {target.contact_id}
-                        </button>
-                      ))}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ))}
+      <Dialog.Root open={Boolean(pendingMerge)} onOpenChange={(open) => !open && setPendingMerge(null)}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="radix-dialog-overlay" />
+          <Dialog.Content className="radix-dialog-content">
+            <div className="radix-dialog-head">
+              <div>
+                <Dialog.Title>Confirmar fusión</Dialog.Title>
+                <Dialog.Description>
+                  Se conservará el contacto {pendingMerge?.keepId ?? "--"} y se fusionará el registro {pendingMerge?.removeId ?? "--"}.
+                </Dialog.Description>
+              </div>
+              <Dialog.Close asChild>
+                <button type="button" className="radix-dialog-close" aria-label="Cerrar">
+                  ×
+                </button>
+              </Dialog.Close>
+            </div>
 
-      {groups.length === 0 ? <div className="card">No se detectaron duplicados.</div> : null}
-    </div>
+            <p className="muted" style={{ margin: 0 }}>
+              Esta acción está pensada para consolidar duplicados detectados automáticamente. Revisa bien el contacto que vas a mantener.
+            </p>
+
+            <div className="radix-dialog-actions">
+              <Dialog.Close asChild>
+                <button type="button" className="quick-pill quick-pill-ghost">
+                  Cancelar
+                </button>
+              </Dialog.Close>
+              <button
+                type="button"
+                disabled={!pendingMerge || busy === `${pendingMerge.keepId}-${pendingMerge.removeId}`}
+                onClick={() => pendingMerge && void mergeContacts(pendingMerge.keepId, pendingMerge.removeId)}
+              >
+                {pendingMerge && busy === `${pendingMerge.keepId}-${pendingMerge.removeId}` ? "Fusionando..." : "Confirmar merge"}
+              </button>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </>
   );
 }

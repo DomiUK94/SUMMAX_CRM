@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
+import { getCurrentUser } from "@/lib/auth/session";
+import { canManageUsers } from "@/lib/auth/permissions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
@@ -227,14 +229,12 @@ async function upsertBySheet(sheetName: string, payload: RowPayload) {
 }
 
 export async function POST(request: Request) {
-  const supabase = createSupabaseServerClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.redirect(new URL("/login", request.url));
+  const appUser = await getCurrentUser();
+  if (!appUser || !canManageUsers(appUser)) {
+    return NextResponse.redirect(new URL("/forbidden", request.url));
   }
+
+  const supabase = createSupabaseServerClient();
 
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
@@ -253,7 +253,7 @@ export async function POST(request: Request) {
       source_type: sourceType,
       filename: file.name,
       status: "processing",
-      created_by_user_id: user.id
+      created_by_user_id: appUser.id
     })
     .select("id")
     .single();

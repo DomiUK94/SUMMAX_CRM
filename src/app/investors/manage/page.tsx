@@ -1,6 +1,7 @@
-import { revalidatePath } from "next/cache";
+﻿import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { StaticTable } from "@/components/ui/static-table";
 import { requireUser } from "@/lib/auth/session";
 import { canManageCrmBulkEdits } from "@/lib/auth/permissions";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
@@ -70,9 +71,7 @@ export default async function ManageInvestorsPage({ searchParams }: SearchProps)
     investorsQuery = await db
       .from("inversion")
       .select("company_id, compania, vertical, web, sede, tamano_empresa, prioridad, inversion_minima, inversion_maxima, comentarios, updated_at")
-      .or(
-        `compania.ilike.${pattern},vertical.ilike.${pattern},web.ilike.${pattern},sede.ilike.${pattern},tamano_empresa.ilike.${pattern},prioridad.ilike.${pattern},comentarios.ilike.${pattern}`
-      )
+      .or(`compania.ilike.${pattern},vertical.ilike.${pattern},web.ilike.${pattern},sede.ilike.${pattern},tamano_empresa.ilike.${pattern},prioridad.ilike.${pattern},comentarios.ilike.${pattern}`)
       .order("updated_at", { ascending: false })
       .limit(120);
   }
@@ -80,75 +79,76 @@ export default async function ManageInvestorsPage({ searchParams }: SearchProps)
   const { data: investors } = investorsQuery;
 
   return (
-    <AppShell title="Modificar datos cuentas" subtitle="Edicion masiva" canViewGlobal={user.can_view_global_dashboard}>
-      <div className="card">
-        {searchParams?.ok === "1" ? <p style={{ color: "#0f766e" }}>Cambios guardados correctamente.</p> : null}
-        {searchParams?.error ? <p style={{ color: "#b91c1c" }}>Error: {searchParams.error}</p> : null}
-
-        <form method="get" className="entity-toolbar" style={{ marginBottom: 12 }}>
-          <input
-            className="toolbar-search"
-            name="q"
-            defaultValue={q}
-            placeholder="Filtra cuentas por cualquier campo visible"
-          />
-          <button type="submit">Filtrar</button>
-          {q ? (
-            <a href="/investors/manage" className="contacts-tab">
-              Limpiar
-            </a>
-          ) : null}
-        </form>
-
-        <form action={updateInvestorsBulkAction} className="stack">
-          <div className="row" style={{ justifyContent: "flex-end" }}>
-            <button type="submit">Guardar cambios masivos</button>
+    <AppShell title="Edici\u00f3n de cuentas" subtitle="Panel de ajuste masivo con el mismo lenguaje visual del CRM" canViewGlobal={user.can_view_global_dashboard}>
+      <div className="editor-shell">
+        <section className="card editor-hero editor-hero-warm">
+          <div>
+            <p className="workspace-kicker">Cuentas</p>
+            <h2>Refina informaci\u00f3n clave sin salir de una sola superficie</h2>
+            <p className="muted">
+              Vertical, prioridad, tickets de inversi\u00f3n y comentarios conviven en una tabla con m\u00e1s jerarqu\u00eda visual, menos sensaci\u00f3n administrativa y mejor ritmo de lectura.
+            </p>
           </div>
-
-          <div className="contacts-table-wrap">
-            <table className="companies-crm-table">
-              <thead>
-                <tr>
-                  <th>Compania</th>
-                  <th>Vertical</th>
-                  <th>Web</th>
-                  <th>Sede</th>
-                  <th>Tamano</th>
-                  <th>Prioridad</th>
-                  <th>Inversion minima</th>
-                  <th>Inversion maxima</th>
-                  <th>Comentarios</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(investors ?? []).map((inv) => {
-                  const id = String(inv.company_id);
-                  return (
-                    <tr key={id}>
-                      <td>
-                        <input type="hidden" name="company_ids" value={id} />
-                        <input name={`compania_${id}`} defaultValue={inv.compania ?? ""} />
-                      </td>
-                      <td><input name={`vertical_${id}`} defaultValue={inv.vertical ?? ""} /></td>
-                      <td><input name={`web_${id}`} defaultValue={inv.web ?? ""} /></td>
-                      <td><input name={`sede_${id}`} defaultValue={inv.sede ?? ""} /></td>
-                      <td><input name={`tamano_empresa_${id}`} defaultValue={inv.tamano_empresa ?? ""} /></td>
-                      <td><input name={`prioridad_${id}`} defaultValue={inv.prioridad ?? ""} /></td>
-                      <td><input name={`inversion_minima_${id}`} defaultValue={inv.inversion_minima ?? ""} /></td>
-                      <td><input name={`inversion_maxima_${id}`} defaultValue={inv.inversion_maxima ?? ""} /></td>
-                      <td><input name={`comentarios_${id}`} defaultValue={inv.comentarios ?? ""} /></td>
-                    </tr>
-                  );
-                })}
-                {(investors ?? []).length === 0 ? (
-                  <tr>
-                    <td colSpan={9}>Sin cuentas.</td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
+          <div className="editor-hero-metrics">
+            <div className="editor-hero-metric">
+              <strong>{investors?.length ?? 0}</strong>
+              <span>cuentas visibles</span>
+            </div>
           </div>
-        </form>
+        </section>
+
+        {searchParams?.ok === "1" ? <div className="notice notice-success">Cambios guardados correctamente.</div> : null}
+        {searchParams?.error ? <div className="notice notice-error">Error: {searchParams.error}</div> : null}
+
+        <section className="card editor-card">
+          <div className="table-card-head">
+            <div>
+              <p className="workspace-kicker">Filtrado</p>
+              <h3>Buscar bloque de cuentas</h3>
+              <p className="muted">Filtra antes de editar para trabajar con una selecci\u00f3n m\u00e1s limpia y enfocada.</p>
+            </div>
+          </div>
+          <form method="get" className="entity-toolbar form-toolbar-surface">
+            <input className="toolbar-search" name="q" defaultValue={q} placeholder="Buscar por compa\u00f1\u00eda, vertical, web o comentario" />
+            <button type="submit">Aplicar</button>
+            {q ? <a href="/investors/manage" className="contacts-tab">Limpiar</a> : null}
+          </form>
+        </section>
+
+        <section className="card editor-card">
+          <form action={updateInvestorsBulkAction} className="editor-stack">
+            <div className="form-actions-bar">
+              <div>
+                <p className="workspace-kicker">Edici\u00f3n masiva</p>
+                <h3>Tabla editable</h3>
+              </div>
+              <button type="submit">Guardar cambios</button>
+            </div>
+
+            <StaticTable
+              columns={["Compa\u00f1\u00eda", "Vertical", "Web", "Sede", "Tama\u00f1o", "Prioridad", "Inv. m\u00ednima", "Inv. m\u00e1xima", "Comentarios"]}
+              rows={(investors ?? []).map((inv) => {
+                const id = String(inv.company_id);
+                return [
+                  <>
+                    <input type="hidden" name="company_ids" value={id} />
+                    <input name={`compania_${id}`} defaultValue={inv.compania ?? ""} />
+                  </>,
+                  <input name={`vertical_${id}`} defaultValue={inv.vertical ?? ""} />,
+                  <input name={`web_${id}`} defaultValue={inv.web ?? ""} />,
+                  <input name={`sede_${id}`} defaultValue={inv.sede ?? ""} />,
+                  <input name={`tamano_empresa_${id}`} defaultValue={inv.tamano_empresa ?? ""} />,
+                  <input name={`prioridad_${id}`} defaultValue={inv.prioridad ?? ""} />,
+                  <input name={`inversion_minima_${id}`} defaultValue={inv.inversion_minima ?? ""} />,
+                  <input name={`inversion_maxima_${id}`} defaultValue={inv.inversion_maxima ?? ""} />,
+                  <input name={`comentarios_${id}`} defaultValue={inv.comentarios ?? ""} />
+                ];
+              })}
+              emptyLabel="Sin cuentas."
+              emptyHint="Ajusta la b\u00fasqueda o vuelve cuando haya cuentas disponibles para revisar."
+            />
+          </form>
+        </section>
       </div>
     </AppShell>
   );

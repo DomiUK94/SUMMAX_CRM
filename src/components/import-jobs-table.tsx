@@ -1,6 +1,8 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { getCoreRowModel, type ColumnDef, useReactTable } from "@tanstack/react-table";
+import { DataTable } from "@/components/ui/data-table";
 
 type ImportJob = {
   id: string;
@@ -45,36 +47,34 @@ export function ImportJobsTable({ initialJobs }: { initialJobs: ImportJob[] }) {
     };
   }, [hasProcessing]);
 
+  const columns = useMemo<ColumnDef<ImportJob>[]>(() => [
+    { id: "created_at", header: "Fecha", cell: ({ row }) => new Date(row.original.created_at).toLocaleString("es-ES") },
+    { id: "source_type", header: "Tipo", cell: ({ row }) => row.original.source_type },
+    { id: "filename", header: "Archivo", cell: ({ row }) => row.original.filename },
+    { id: "status", header: "Estado", cell: ({ row }) => <span className={`import-status status-${row.original.status}`}>{row.original.status}</span> },
+    { id: "rows", header: "Filas", cell: ({ row }) => row.original.summary_json?.rowsProcessed ?? 0 },
+    { id: "inserted_count", header: "Nuevos", cell: ({ row }) => row.original.inserted_count },
+    { id: "merged_count", header: "Fusionados", cell: ({ row }) => row.original.merged_count },
+    { id: "warning_count", header: "Avisos", cell: ({ row }) => row.original.warning_count },
+    { id: "error_count", header: "Errores", cell: ({ row }) => row.original.error_count }
+  ], []);
+
+  const table = useReactTable({ data: jobs, columns, getRowId: (row) => row.id, getCoreRowModel: getCoreRowModel() });
+
   return (
     <div className="stack">
       <div className="row">
         <h3>Historial</h3>
         <div className="muted">
           Actualizado: {new Date(updatedAt).toLocaleTimeString("es-ES")}
-          {hasProcessing ? <span className="import-live"> Actualizando...</span> : null}
+          {hasProcessing ? <span className="import-live"> Actualizando en vivo...</span> : null}
         </div>
       </div>
-      <table>
-        <thead>
-          <tr><th>Fecha</th><th>Tipo</th><th>Archivo</th><th>Estado</th><th>Filas</th><th>Inserted</th><th>Merged</th><th>Warnings</th><th>Errors</th></tr>
-        </thead>
-        <tbody>
-          {jobs.map((j) => (
-            <tr key={j.id}>
-              <td>{new Date(j.created_at).toLocaleString("es-ES")}</td>
-              <td>{j.source_type}</td>
-              <td>{j.filename}</td>
-              <td><span className={`import-status status-${j.status}`}>{j.status}</span></td>
-              <td>{j.summary_json?.rowsProcessed ?? 0}</td>
-              <td>{j.inserted_count}</td>
-              <td>{j.merged_count}</td>
-              <td>{j.warning_count}</td>
-              <td>{j.error_count}</td>
-            </tr>
-          ))}
-          {jobs.length === 0 ? <tr><td colSpan={9}>Sin importaciones todavia.</td></tr> : null}
-        </tbody>
-      </table>
+      <DataTable
+        table={table}
+        emptyLabel="Sin importaciones todav\u00eda."
+        emptyHint="Cuando subas un archivo ver\u00e1s aqu\u00ed el estado, los avisos y el resultado final."
+      />
     </div>
   );
 }

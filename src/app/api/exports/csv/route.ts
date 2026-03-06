@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/auth/session";
+import { canManageUsers } from "@/lib/auth/permissions";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
 function toCsv(rows: Record<string, unknown>[]): string {
@@ -21,14 +22,10 @@ function toCsv(rows: Record<string, unknown>[]): string {
 }
 
 export async function GET(request: Request) {
-  const supabase = createSupabaseServerClient();
+  const appUser = await getCurrentUser();
   const sourceCrm = createSourceCrmServerClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return NextResponse.redirect(new URL("/login", request.url));
+  if (!canManageUsers(appUser)) {
+    return NextResponse.redirect(new URL("/forbidden", request.url));
   }
 
   const url = new URL(request.url);

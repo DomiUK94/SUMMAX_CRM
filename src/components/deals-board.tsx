@@ -1,9 +1,17 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { motion } from "motion/react";
+import {
+  getCoreRowModel,
+  type ColumnDef,
+  type VisibilityState,
+  useReactTable
+} from "@tanstack/react-table";
 import { usePersistedState } from "@/lib/ui/use-persisted-state";
 import { useSavedViews } from "@/lib/ui/use-saved-views";
+import { DataTable } from "@/components/ui/data-table";
 
 type DealCard = {
   id: number;
@@ -29,24 +37,42 @@ type DragState = {
 
 type DealsViewMode = "panel" | "table";
 type DealsQuickFilter = "all" | "high_value" | "without_contact" | "close_30d";
-
 type DealColumnKey = "name" | "amount" | "closeDate" | "priority" | "stage" | "contactName" | "companyId" | "createdDate";
 
+type DealTableRow = {
+  rowId: string;
+  stage: string;
+  card: DealCard;
+};
+
+const COLUMN_ORDER: DealColumnKey[] = ["name", "amount", "closeDate", "priority", "stage", "contactName", "companyId", "createdDate"];
+
 const DEAL_LABELS: Record<DealColumnKey, string> = {
-  name: "Nombre de Cuenta",
-  amount: "Importe Total",
+  name: "Nombre de cuenta",
+  amount: "Importe total",
   closeDate: "Fecha estimada de cierre",
   priority: "Prioridad",
   stage: "Estado",
   contactName: "Contacto",
-  companyId: "ID compañia",
-  createdDate: "Fecha de creación",
+  companyId: "ID compa\u00f1\u00eda",
+  createdDate: "Fecha de creaci\u00f3n"
+};
+
+const DEFAULT_COLUMNS: VisibilityState = {
+  name: true,
+  amount: true,
+  closeDate: true,
+  priority: true,
+  stage: true,
+  contactName: true,
+  companyId: false,
+  createdDate: false
 };
 
 function formatAmountEur(rawAmount: string): string {
   const raw = String(rawAmount ?? "").trim();
-  if (!raw) return "€0";
-  if (raw.includes("€")) return raw;
+  if (!raw) return "EUR 0";
+  if (raw.includes("EUR") || raw.includes("�")) return raw;
 
   const normalized = raw
     .replace(/\s/g, "")
@@ -55,7 +81,7 @@ function formatAmountEur(rawAmount: string): string {
     .replace(/[^\d.-]/g, "");
   const parsed = Number(normalized);
 
-  if (!Number.isFinite(parsed)) return `€ ${raw}`;
+  if (!Number.isFinite(parsed)) return `EUR ${raw}`;
   return new Intl.NumberFormat("es-ES", {
     style: "currency",
     currency: "EUR",
@@ -75,12 +101,7 @@ function parseAmountNumber(rawAmount: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function moveDeal(
-  current: Record<string, DealCard[]>,
-  fromStage: string,
-  toStage: string,
-  dealId: number
-): Record<string, DealCard[]> {
+function moveDeal(current: Record<string, DealCard[]>, fromStage: string, toStage: string, dealId: number): Record<string, DealCard[]> {
   if (fromStage === toStage) return current;
 
   const source = current[fromStage] ?? [];
@@ -123,26 +144,16 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
   const [byStage, setByStage] = useState<Record<string, DealCard[]>>(initialByStage);
   const [dragState, setDragState] = useState<DragState>(null);
   const [hoverStage, setHoverStage] = useState<string | null>(null);
+  const [selectedViewId, setSelectedViewId] = useState("");
   const [viewMode, setViewMode] = usePersistedState<DealsViewMode>(`${prefix}:view_mode`, "panel");
-  const [showColumnsEditor, setShowColumnsEditor] = useState(false);
   const [searchDraft, setSearchDraft] = usePersistedState(`${prefix}:search_draft`, "");
   const [searchApplied, setSearchApplied] = usePersistedState(`${prefix}:search_applied`, "");
   const [quickFilter, setQuickFilter] = usePersistedState<DealsQuickFilter>(`${prefix}:quick_filter`, "all");
-  const [columns, setColumns] = usePersistedState<Record<DealColumnKey, boolean>>(`${prefix}:columns`, {
-    name: true,
-    amount: true,
-    closeDate: true,
-    priority: true,
-    stage: true,
-    contactName: true,
-    companyId: false,
-    createdDate: false
-  });
+  const [columnVisibility, setColumnVisibility] = usePersistedState<VisibilityState>(`${prefix}:columns`, DEFAULT_COLUMNS);
 
-  const visibleColumns = (Object.keys(columns) as DealColumnKey[]).filter((k) => columns[k]);
   const savedViews = useSavedViews({
     module: "deals",
-    currentFilters: { searchApplied, viewMode, quickFilter, columns },
+    currentFilters: { searchApplied, viewMode, quickFilter, columns: columnVisibility },
     onApply: (filters) => {
       const nextSearch = typeof filters.searchApplied === "string" ? filters.searchApplied : "";
       const nextView = filters.viewMode === "table" ? "table" : "panel";
@@ -153,95 +164,31 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
         filters.quickFilter === "close_30d"
           ? filters.quickFilter
           : "all";
+      const nextColumns = (filters.columns as VisibilityState) ?? DEFAULT_COLUMNS;
       setSearchDraft(nextSearch);
       setSearchApplied(nextSearch);
       setViewMode(nextView);
       setQuickFilter(nextQuick);
-      setColumns(((filters.columns as Record<DealColumnKey, boolean>) ?? columns));
+      setColumnVisibility(nextColumns);
     }
   });
-  const totalDeals = useMemo(
-    () => stages.reduce((acc, stage) => acc + (byStage[stage]?.length ?? 0), 0),
-    [byStage, stages]
-  );
 
-  function toggleColumn(key: DealColumnKey) {
-    const visible = visibleColumns.length;
-    if (columns[key] && visible === 1) return;
-    setColumns((current) => ({ ...current, [key]: !current[key] }));
-  }
+  const totalDeals = useMemo(() => stages.reduce((acc, stage) => acc + (byStage[stage]?.length ?? 0), 0), [byStage, stages]);
 
-  function exportCsv() {
-    if (!visibleColumns.length) return;
-
-    const rows: Array<Record<DealColumnKey, string>> = [];
-    stages.forEach((stage) => {
-      (byStage[stage] ?? []).forEach((deal) => {
-        rows.push({
-          stage,
-          companyId: String(deal.id),
-          name: deal.name,
-          amount: formatAmountEur(deal.amount),
-          closeDate: deal.closeDate,
-          priority: deal.priority,
-          createdDate: deal.createdDate,
-          contactName: deal.contactName
-        });
-      });
-    });
-
-    const escape = (value: string) => {
-      if (value.includes(",") || value.includes('"') || value.includes("\n")) return `"${value.replace(/"/g, '""')}"`;
-      return value;
-    };
-    const csv = [
-      visibleColumns.map((c) => DEAL_LABELS[c]).join(","),
-      ...rows.map((row) => visibleColumns.map((c) => escape(row[c] ?? "--")).join(","))
-    ].join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `negocios-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
-  const matches = (stage: string, card: DealCard) => {
+  const filteredRows = useMemo(() => {
     const q = searchApplied.trim().toLowerCase();
-    if (!q) return true;
-    return visibleColumns.some((key) => fieldValue(stage, card, key).toLowerCase().includes(q));
-  };
+    const searchableColumns = COLUMN_ORDER.filter((key) => columnVisibility[key] !== false);
 
-  const filteredRows = useMemo(
-    () =>
-      stages.flatMap((stage) =>
-        (byStage[stage] ?? []).filter((card) => matches(stage, card)).map((card) => ({ stage, card }))
-      ),
-    [stages, byStage, searchApplied, visibleColumns]
-  );
-  const highValueCount = useMemo(() => filteredRows.filter((r) => parseAmountNumber(r.card.amount) >= 100000).length, [filteredRows]);
-  const withoutContactCount = useMemo(() => filteredRows.filter((r) => !r.card.contactId).length, [filteredRows]);
-  const close30dCount = useMemo(() => {
-    const now = new Date();
-    const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-    return filteredRows.filter((r) => {
-      const parsed = new Date(r.card.closeDate);
-      if (Number.isNaN(parsed.getTime())) return false;
-      return parsed >= now && parsed <= in30;
-    }).length;
-  }, [filteredRows]);
+    return stages.flatMap((stage) =>
+      (byStage[stage] ?? [])
+        .filter((card) => !q || searchableColumns.some((key) => fieldValue(stage, card, key).toLowerCase().includes(q)))
+        .map((card) => ({ rowId: `${stage}-${card.id}`, stage, card }))
+    );
+  }, [byStage, columnVisibility, searchApplied, stages]);
 
   const filteredByQuickTab = useMemo(() => {
-    if (quickFilter === "high_value") {
-      return filteredRows.filter((row) => parseAmountNumber(row.card.amount) >= 100000);
-    }
-    if (quickFilter === "without_contact") {
-      return filteredRows.filter((row) => !row.card.contactId);
-    }
+    if (quickFilter === "high_value") return filteredRows.filter((row) => parseAmountNumber(row.card.amount) >= 100000);
+    if (quickFilter === "without_contact") return filteredRows.filter((row) => !row.card.contactId);
     if (quickFilter === "close_30d") {
       const now = new Date();
       const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
@@ -259,12 +206,121 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
     [filteredByQuickTab]
   );
 
+  const highValueCount = useMemo(() => filteredRows.filter((row) => parseAmountNumber(row.card.amount) >= 100000).length, [filteredRows]);
+  const withoutContactCount = useMemo(() => filteredRows.filter((row) => !row.card.contactId).length, [filteredRows]);
+  const close30dCount = useMemo(() => {
+    const now = new Date();
+    const in30 = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    return filteredRows.filter((row) => {
+      const parsed = new Date(row.card.closeDate);
+      if (Number.isNaN(parsed.getTime())) return false;
+      return parsed >= now && parsed <= in30;
+    }).length;
+  }, [filteredRows]);
+
+  const columns = useMemo<ColumnDef<DealTableRow>[]>(() => [
+    {
+      id: "name",
+      header: DEAL_LABELS.name,
+      cell: ({ row }) => (
+        <Link href={`/investors/${row.original.card.id}`} className="contact-name-link">
+          {row.original.card.name}
+        </Link>
+      )
+    },
+    {
+      id: "amount",
+      header: DEAL_LABELS.amount,
+      cell: ({ row }) => formatAmountEur(row.original.card.amount)
+    },
+    {
+      id: "closeDate",
+      header: DEAL_LABELS.closeDate,
+      cell: ({ row }) => row.original.card.closeDate || "--"
+    },
+    {
+      id: "priority",
+      header: DEAL_LABELS.priority,
+      cell: ({ row }) => row.original.card.priority || "--"
+    },
+    {
+      id: "stage",
+      header: DEAL_LABELS.stage,
+      cell: ({ row }) => row.original.stage
+    },
+    {
+      id: "contactName",
+      header: DEAL_LABELS.contactName,
+      cell: ({ row }) =>
+        row.original.card.contactId ? (
+          <Link href={`/contacts/${row.original.card.contactId}`} className="contact-name-link">
+            {row.original.card.contactName}
+          </Link>
+        ) : (
+          row.original.card.contactName
+        )
+    },
+    {
+      id: "companyId",
+      header: DEAL_LABELS.companyId,
+      cell: ({ row }) => row.original.card.id
+    },
+    {
+      id: "createdDate",
+      header: DEAL_LABELS.createdDate,
+      cell: ({ row }) => row.original.card.createdDate || "--"
+    }
+  ], []);
+
+  const table = useReactTable({
+    data: filteredByQuickTab,
+    columns,
+    state: { columnVisibility },
+    onColumnVisibilityChange: setColumnVisibility,
+    getRowId: (row) => row.rowId,
+    getCoreRowModel: getCoreRowModel()
+  });
+
+  function exportCsv() {
+    const visibleColumns = COLUMN_ORDER.filter((key) => table.getColumn(key)?.getIsVisible());
+    if (!visibleColumns.length) return;
+
+    const escape = (value: string) => {
+      if (value.includes(",") || value.includes('"') || value.includes("\n")) return `"${value.replace(/"/g, '""')}"`;
+      return value;
+    };
+
+    const csv = [
+      visibleColumns.map((column) => DEAL_LABELS[column]).join(","),
+      ...filteredByQuickTab.map((row) => visibleColumns.map((column) => escape(fieldValue(row.stage, row.card, column) || "--")).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `negocios-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  const visibleColumnCount = COLUMN_ORDER.filter((key) => table.getColumn(key)?.getIsVisible()).length;
+
+  function toggleColumn(key: DealColumnKey) {
+    const column = table.getColumn(key);
+    if (!column) return;
+    if (column.getIsVisible() && visibleColumnCount === 1) return;
+    column.toggleVisibility(!column.getIsVisible());
+  }
+
   return (
     <>
       <div className="entity-toolbar">
         <input
           className="toolbar-search"
-          placeholder="Busca info de Negocios (Cualquier columna)"
+          placeholder="Buscar negocio o dato visible"
           value={searchDraft}
           onChange={(event) => setSearchDraft(event.target.value)}
           onKeyDown={(event) => {
@@ -274,44 +330,68 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
             }
           }}
         />
-        <button onClick={() => setSearchApplied(searchDraft)}>Filtrar</button>
-        <div className="entity-toolbar-view">
-          <span>Vista:</span>
-          <select value={viewMode} onChange={(event) => setViewMode(event.target.value as DealsViewMode)}>
-            <option value="panel">Panel</option>
-            <option value="table">Tabla</option>
-          </select>
-        </div>
-        <div className="entity-toolbar-actions">
-          <button onClick={() => setShowColumnsEditor((s) => !s)}>Editar columnas</button>
-          <button
-            onClick={async () => {
-              const name = window.prompt("Nombre de la vista");
-              if (!name) return;
-              await savedViews.saveCurrent(name);
-            }}
-          >
-            Guardar vista
-          </button>
-          <select
-            defaultValue=""
-            onChange={(event) => {
-              if (!event.target.value) return;
-              savedViews.applyView(event.target.value);
-              event.currentTarget.value = "";
-            }}
-          >
-            <option value="">{savedViews.loading ? "Cargando vistas..." : "Aplicar vista guardada"}</option>
-            {savedViews.views.map((view) => (
-              <option key={view.id} value={view.id}>
-                {view.name}
-              </option>
-            ))}
-          </select>
-          <button onClick={exportCsv}>Exportar</button>
+        <button onClick={() => setSearchApplied(searchDraft)}>Aplicar</button>
+        <div className="entity-toolbar-inline">
+          <div className="entity-toolbar-section entity-toolbar-view">
+            <span className="entity-toolbar-section-title">Vista</span>
+            <select value={viewMode} onChange={(event) => setViewMode(event.target.value as DealsViewMode)}>
+              <option value="panel">Panel</option>
+              <option value="table">Tabla</option>
+            </select>
+            <select
+              value={selectedViewId}
+              onChange={(event) => {
+                const id = event.target.value;
+                setSelectedViewId(id);
+                if (!id) return;
+                savedViews.applyView(id);
+              }}
+            >
+              <option value="">{savedViews.loading ? "Cargando vistas..." : "Vistas guardadas"}</option>
+              {savedViews.views.map((view) => (
+                <option key={view.id} value={view.id}>
+                  {view.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <details className="entity-toolbar-menu">
+            <summary aria-label="M\u00e1s acciones de vista">Men\u00fa</summary>
+            <div className="entity-toolbar-menu-panel">
+              <div className="columns-editor" style={{ marginBottom: 0 }}>
+                {COLUMN_ORDER.map((key) => (
+                  <label key={key}>
+                    <input type="checkbox" checked={table.getColumn(key)?.getIsVisible() ?? false} onChange={() => toggleColumn(key)} />
+                    {DEAL_LABELS[key]}
+                  </label>
+                ))}
+              </div>
+              <button
+                onClick={async () => {
+                  const name = window.prompt("Nombre de la vista");
+                  if (!name) return;
+                  await savedViews.saveCurrent(name);
+                }}
+              >
+                Guardar vista
+              </button>
+              <button
+                disabled={!selectedViewId}
+                onClick={async () => {
+                  if (!selectedViewId) return;
+                  await savedViews.deleteView(selectedViewId);
+                  setSelectedViewId("");
+                }}
+              >
+                Eliminar vista
+              </button>
+              <button onClick={exportCsv}>Exportar</button>
+            </div>
+          </details>
         </div>
       </div>
-      <div className="smart-tabs-row" role="tablist" aria-label="Filtros rápidos de negocios">
+
+      <div className="smart-tabs-row" role="tablist" aria-label="Filtros r\u00e1pidos de negocios">
         <button className={quickFilter === "all" ? "smart-tab smart-tab-active" : "smart-tab"} onClick={() => setQuickFilter("all")}>
           Todos
         </button>
@@ -331,20 +411,9 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
           className={quickFilter === "close_30d" ? "smart-tab smart-tab-active" : "smart-tab"}
           onClick={() => setQuickFilter("close_30d")}
         >
-          Cierre 30 días <span className="contacts-badge">{close30dCount}</span>
+          Cierre 30 d\u00edas <span className="contacts-badge">{close30dCount}</span>
         </button>
       </div>
-
-      {showColumnsEditor ? (
-        <div className="columns-editor">
-          {(Object.keys(columns) as DealColumnKey[]).map((key) => (
-            <label key={key}>
-              <input type="checkbox" checked={columns[key]} onChange={() => toggleColumn(key)} />
-              {DEAL_LABELS[key]}
-            </label>
-          ))}
-        </div>
-      ) : null}
 
       {viewMode === "panel" ? (
         <div className="deals-board-wrap">
@@ -377,40 +446,39 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
                     <span className="deals-column-count">{cards.length}</span>
                   </header>
                   <div className="deals-column-body" style={isHover ? { outline: "2px dashed #94a3b8", outlineOffset: 2 } : undefined}>
-                    {cards.map((card) => (
-                      <article
+                    {cards.map((card, index) => (
+                      <motion.article
                         key={card.id}
                         className="deal-card"
                         draggable
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.18, delay: Math.min(index * 0.03, 0.18) }}
                         onDragStart={() => setDragState({ fromStage: stage, dealId: card.id })}
                         onDragEnd={() => {
                           setDragState(null);
                           setHoverStage(null);
                         }}
                       >
-                        {columns.name ? (
+                        {table.getColumn("name")?.getIsVisible() ? (
                           <Link href={`/investors/${card.id}`} className="deal-card-title">
                             {card.name}
                           </Link>
                         ) : null}
-                        {columns.companyId ? <div>ID compañía: {card.id}</div> : null}
-                        {columns.amount ? <div>Importe: {formatAmountEur(card.amount)}</div> : null}
-                        {columns.closeDate ? <div>Fecha estimada de cierre: {card.closeDate}</div> : null}
-                        {columns.priority ? <div>Prioridad: {card.priority}</div> : null}
-                        {columns.createdDate ? <div>Fecha de creación: {card.createdDate}</div> : null}
-                        {columns.contactName ? (
+                        {table.getColumn("companyId")?.getIsVisible() ? <div>ID compa\u00f1\u00eda: {card.id}</div> : null}
+                        {table.getColumn("amount")?.getIsVisible() ? <div>Importe: {formatAmountEur(card.amount)}</div> : null}
+                        {table.getColumn("closeDate")?.getIsVisible() ? <div>Fecha estimada de cierre: {card.closeDate}</div> : null}
+                        {table.getColumn("priority")?.getIsVisible() ? <div>Prioridad: {card.priority}</div> : null}
+                        {table.getColumn("createdDate")?.getIsVisible() ? <div>Fecha de creaci\u00f3n: {card.createdDate}</div> : null}
+                        {table.getColumn("contactName")?.getIsVisible() ? (
                           <>
                             <hr />
                             <div>
-                              {card.contactId ? (
-                                <Link href={`/contacts/${card.contactId}`}>{card.contactName}</Link>
-                              ) : (
-                                card.contactName
-                              )}
+                              {card.contactId ? <Link href={`/contacts/${card.contactId}`}>{card.contactName}</Link> : card.contactName}
                             </div>
                           </>
                         ) : null}
-                      </article>
+                      </motion.article>
                     ))}
                   </div>
                   <footer className="deals-column-footer">
@@ -426,60 +494,7 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
           <div className="card" style={{ padding: "10px 12px" }}>
             <strong>Importe total (negocios visibles): {formatAmountEur(String(totalFilteredAmount))}</strong>
           </div>
-          <div className="contacts-table-wrap">
-          <table className="contacts-crm-table">
-            <thead>
-              <tr>
-                {visibleColumns.map((column) => (
-                  <th key={column}>{DEAL_LABELS[column]}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filteredByQuickTab.map(({ stage, card }) => (
-                <tr key={`${stage}-${card.id}`}>
-                  {visibleColumns.map((column) => {
-                    if (column === "name") {
-                      return (
-                        <td key={column}>
-                          <Link href={`/investors/${card.id}`}>{card.name}</Link>
-                        </td>
-                      );
-                    }
-                    if (column === "contactName") {
-                      return (
-                        <td key={column}>
-                          {card.contactId ? <Link href={`/contacts/${card.contactId}`}>{card.contactName}</Link> : card.contactName}
-                        </td>
-                      );
-                    }
-                    return <td key={column}>{fieldValue(stage, card, column) || "--"}</td>;
-                  })}
-                </tr>
-              ))}
-              {filteredByQuickTab.length === 0 ? (
-                <tr>
-                  <td colSpan={Math.max(visibleColumns.length, 1)}>Sin negocios.</td>
-                </tr>
-              ) : null}
-            </tbody>
-            {filteredByQuickTab.length > 0 ? (
-              <tfoot>
-                <tr>
-                  {visibleColumns.map((column, index) => {
-                    if (column === "amount") {
-                      return <td key={column}><strong>{formatAmountEur(String(totalFilteredAmount))}</strong></td>;
-                    }
-                    if (index === 0) {
-                      return <td key={column}><strong>Total</strong></td>;
-                    }
-                    return <td key={column}>--</td>;
-                  })}
-                </tr>
-              </tfoot>
-            ) : null}
-          </table>
-        </div>
+          <DataTable table={table} emptyLabel="Sin negocios." emptyHint="Todav\u00eda no hay negocios visibles con los filtros actuales." />
         </div>
       )}
     </>

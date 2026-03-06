@@ -108,8 +108,8 @@ export default async function ContactsPage({
           <Link href="/contacts/new" className="contacts-add">
             Añadir
           </Link>
-          <Link href="/contacts/duplicates" className="contacts-tab">
-            Duplicados
+          <Link href="/contacts/duplicates" className="contacts-tab contacts-tab-duplicates">
+            Posibles duplicados
           </Link>
         </div>
         <div className="contacts-toolbar card">

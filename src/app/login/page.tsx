@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+﻿import { redirect } from "next/navigation";
 import Image from "next/image";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
@@ -10,6 +10,15 @@ type SearchProps = {
     next?: string;
   };
 };
+
+function formatError(error?: string, reason?: string) {
+  if (!error) return null;
+  if (error === "invalid_credentials") return "Email o contraseña incorrectos.";
+  if (error === "forbidden" && reason === "not_in_crm_users") return "Tu usuario no está habilitado en el CRM.";
+  if (error === "forbidden" && reason === "user_inactive") return "Tu usuario está inactivo.";
+  if (error === "profile_sync_failed") return `No se pudo sincronizar tu perfil${reason ? `: ${reason}` : "."}`;
+  return `Error: ${error}${reason ? ` (${reason})` : ""}`;
+}
 
 export default function LoginPage({ searchParams }: SearchProps) {
   async function login(formData: FormData) {
@@ -72,12 +81,7 @@ export default function LoginPage({ searchParams }: SearchProps) {
         details: profileError.details,
         hint: profileError.hint
       });
-      const reasonRaw = [
-        profileError.code,
-        profileError.message,
-        profileError.details,
-        profileError.hint
-      ]
+      const reasonRaw = [profileError.code, profileError.message, profileError.details, profileError.hint]
         .filter(Boolean)
         .join(" | ");
       const reason = encodeURIComponent(reasonRaw || "unknown");
@@ -87,29 +91,32 @@ export default function LoginPage({ searchParams }: SearchProps) {
     redirect(next.startsWith("/") ? next : "/dashboard/me");
   }
 
+  const errorMessage = formatError(searchParams?.error, searchParams?.reason);
+
   return (
-    <main>
-      <div className="card" style={{ maxWidth: 420, margin: "48px auto" }}>
+    <main className="login-page login-page-simple">
+      <section className="login-card card">
         <div className="login-logo-wrap">
-          <Image src="/SUMMAX_CRM_Logo.png" alt="SUMMAX CRM" width={220} height={56} className="login-logo" priority />
+          <Image src="/SUMMAX_CRM_Logo.png" alt="SUMMAX CRM" width={240} height={72} className="login-logo" priority />
         </div>
-        <h1>Login</h1>
-        <p>Acceso por email y password.</p>
-        {searchParams?.error ? (
-          <p style={{ color: "#b91c1c" }}>
-            Error: {searchParams.error}
-            {searchParams.reason ? ` (${searchParams.reason})` : ""}
-          </p>
-        ) : null}
-        <form action={login}>
+        <div className="login-copy">
+          <h2>Acceder</h2>
+          <p className="muted">Entra con tu email y tu contraseña.</p>
+        </div>
+        {errorMessage ? <p className="login-error">{errorMessage}</p> : null}
+        <form action={login} className="login-form stack">
           <input type="hidden" name="next" value={searchParams?.next ?? "/dashboard/me"} />
-          <label>Email</label>
-          <input name="email" required type="email" placeholder="nombre@summax.com" style={{ width: "100%", marginBottom: 12 }} />
-          <label>Password</label>
-          <input name="password" required type="password" placeholder="********" style={{ width: "100%", marginBottom: 12 }} />
-          <button type="submit">Entrar</button>
+          <label className="stack">
+            <span>Email</span>
+            <input name="email" required type="email" placeholder="nombre@summax.com" autoComplete="email" />
+          </label>
+          <label className="stack">
+            <span>Password</span>
+            <input name="password" required type="password" placeholder="********" autoComplete="current-password" />
+          </label>
+          <button type="submit">Entrar al CRM</button>
         </form>
-      </div>
+      </section>
     </main>
   );
 }

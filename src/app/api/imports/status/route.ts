@@ -1,19 +1,15 @@
 import { NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth/session";
+import { canManageUsers } from "@/lib/auth/permissions";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
-function isDevBypassEnabled(): boolean {
-  return process.env.NODE_ENV === "development" && process.env.DEV_AUTH_BYPASS === "true";
-}
-
 export async function GET() {
-  const supabase = createSupabaseServerClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
-
-  if (!user && !isDevBypassEnabled()) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const appUser = await getCurrentUser();
+  if (!canManageUsers(appUser)) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
+
+  const supabase = createSupabaseServerClient();
 
   const { data, error } = await supabase
     .from("import_batches")
