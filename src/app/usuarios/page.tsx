@@ -1,4 +1,4 @@
-﻿import { revalidatePath } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { StaticTable } from "@/components/ui/static-table";
@@ -176,14 +176,14 @@ export default async function UsuariosPage({ searchParams }: SearchProps) {
     .sort((a, b) => a.email.localeCompare(b.email, "es"));
 
   return (
-    <AppShell title="Usuarios" subtitle="Altas, permisos y vinculaci\u00f3n con una capa visual consistente" canViewGlobal={user.can_view_global_dashboard}>
+    <AppShell title="Usuarios" subtitle="Altas, permisos y usuarios existentes" canViewGlobal={user.can_view_global_dashboard}>
       <div className="editor-shell">
         <section className="card editor-hero">
           <div>
             <p className="workspace-kicker">Acceso CRM</p>
             <h2>Gestiona altas y permisos sin salir del mismo lenguaje visual</h2>
             <p className="muted">
-              Esta vista deja de sentirse como una consola aparte: altas nuevas, usuarios existentes y permisos comparten jerarqu\u00eda, espaciado y acabados del resto del producto.
+              Crea usuarios nuevos, incorpora usuarios existentes y revisa permisos desde una sola vista mas clara.
             </p>
           </div>
           <div className="editor-hero-metrics">
@@ -193,7 +193,7 @@ export default async function UsuariosPage({ searchParams }: SearchProps) {
             </div>
             <div className="editor-hero-metric">
               <strong>{publicNotInCrm.length}</strong>
-              <span>pendientes de vincular</span>
+              <span>por incorporar</span>
             </div>
           </div>
         </section>
@@ -270,9 +270,9 @@ export default async function UsuariosPage({ searchParams }: SearchProps) {
           <div className="card editor-card">
             <div className="table-card-head">
               <div>
-                <p className="workspace-kicker">Vinculaci\u00f3n</p>
-                <h3>A\u00f1adir usuario existente</h3>
-                <p className="muted">Trae usuarios ya creados en Public Users y dales rol dentro del CRM.</p>
+                <p className="workspace-kicker">Usuarios existentes</p>
+                <h3>Agregar usuario existente</h3>
+                <p className="muted">Trae usuarios ya creados en Public Users y dales acceso dentro del CRM.</p>
               </div>
             </div>
             <form action={linkExistingAuthUserAction} className="editor-stack">
@@ -325,7 +325,7 @@ export default async function UsuariosPage({ searchParams }: SearchProps) {
               <div className="form-actions-bar form-actions-bar-start">
                 <button type="submit" disabled={publicNotInCrm.length === 0}>Agregar desde Public Users</button>
               </div>
-              {publicNotInCrm.length === 0 ? <p className="muted">No hay usuarios pendientes de agregar a CRM.</p> : null}
+              {publicNotInCrm.length === 0 ? <p className="muted">No hay usuarios pendientes de incorporar al CRM.</p> : null}
             </form>
           </div>
         </section>
@@ -369,10 +369,11 @@ export default async function UsuariosPage({ searchParams }: SearchProps) {
               )
             ])}
             emptyLabel="Sin usuarios CRM."
-            emptyHint="Cuando se creen o vinculen usuarios aparecer\u00e1n aqu\u00ed con su configuraci\u00f3n."
+            emptyHint="Cuando se creen o se incorporen usuarios apareceran aqui con su configuracion."
           />
         </section>
       </div>
     </AppShell>
   );
 }
+

@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import Image from "next/image";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
@@ -86,15 +86,15 @@ export async function AppShell({
     {
       title: "Operativa",
       items: [
-        { href: "/search", label: "Búsqueda global", icon: "search" },
         { href: "/contacts", label: "Contactos", icon: "contacts" },
         { href: "/investors", label: "Cuentas", icon: "companies" },
+        { href: "/actividades", label: "Actividades", icon: "activity" },
         { href: "/acuerdos", label: "Negocios", icon: "deals" },
-        { href: "/actividades", label: "Actividades", icon: "activity" }
+        { href: "/search", label: "B\u00fasqueda global", icon: "search" }
       ]
     },
     {
-      title: "Configuración",
+      title: "Configuraci\u00f3n",
       collapsible: true,
       defaultOpen: false,
       items: [
@@ -107,12 +107,13 @@ export async function AppShell({
       ]
     },
     {
-      title: "Analítica",
+      title: "Anal\u00edtica",
       collapsible: true,
       defaultOpen: false,
       items: [
-        { href: "/dashboard/general", label: "Dashboard general", icon: "overview", visible: canViewGlobal },
-        { href: "/reporte-financiacion", label: "Reporte financiación", icon: "report", visible: canViewGlobal }
+        { href: "/dashboard/general", label: "General", icon: "overview", visible: canViewGlobal },
+        { href: "/dashboard/web", label: "Web", icon: "overview", visible: canViewGlobal },
+        { href: "/reporte-financiacion", label: "Financiaci\u00f3n", icon: "report", visible: canViewGlobal }
       ]
     }
   ];
@@ -131,7 +132,7 @@ export async function AppShell({
 
       <section className="workspace">
         <details className="mobile-nav card">
-          <summary>Navegación</summary>
+          <summary>Navegaci\u00f3n</summary>
           <div className="mobile-nav-panel">{renderNavGroups(navGroups)}</div>
         </details>
 
@@ -149,4 +150,10 @@ export async function AppShell({
     </div>
   );
 }
+
+
+
+
+
+
 

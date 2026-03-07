@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -62,8 +62,8 @@ const DATA_COLUMN_ORDER: ColumnKey[] = [
 
 const COLUMN_LABELS: Record<ColumnKey, string> = {
   id: "ID",
-  full_name: "Nombre contacto",
-  investor_name: "Nombre compañía",
+  full_name: "Contacto",
+  investor_name: "Compa\u00f1ia",
   status_name: "Prioridad",
   owner_email: "Propietario contacto",
   owner_user_id: "ID propietario",
@@ -329,24 +329,18 @@ export function ContactsTable({
         header: COLUMN_LABELS.full_name,
         cell: ({ row }) => (
           <div className="contact-name-cell">
-            <Link className="contact-name-link" href={`/contacts/${encodeURIComponent(row.original.id)}`}>
-              {displayValue(row.original, "full_name")}
-            </Link>
             <button
               type="button"
-              className="contact-preview-trigger"
+              className="contact-name-link"
               onClick={() => setQuickViewContact(row.original)}
-              aria-label={`Vista rápida de ${row.original.full_name}`}
+              aria-label={`Vista rapida de ${row.original.full_name}`}
             >
-              <span className="toolbar-button-icon" aria-hidden="true">
-                <CrmIcon name="overview" className="crm-icon" />
-              </span>
+              {displayValue(row.original, "full_name")}
             </button>
           </div>
         )
       },
       {
-        accessorKey: "investor_name",
         id: "investor_name",
         header: COLUMN_LABELS.investor_name,
         cell: ({ row }) => displayValue(row.original, "investor_name")
@@ -683,9 +677,7 @@ export function ContactsTable({
               transition={{ duration: 0.18, delay: Math.min(index * 0.03, 0.18) }}
             >
               <div className="timeline-item-head">
-                <Link className="contact-name-link" href={`/contacts/${encodeURIComponent(row.original.id)}`}>
-                  {row.original.full_name}
-                </Link>
+                <span>{row.original.full_name}</span>
                 <span className={`contact-followup-badge contact-followup-${followUpLevel(row.original.updated_at)}`}>
                   {daysWithoutAction(row.original.updated_at)} d
                 </span>
@@ -793,3 +785,7 @@ export function ContactsTable({
     </>
   );
 }
+
+
+
+

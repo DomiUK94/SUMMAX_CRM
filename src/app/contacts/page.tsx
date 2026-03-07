@@ -1,4 +1,4 @@
-﻿import { AppShell } from "@/components/app-shell";
+import { AppShell } from "@/components/app-shell";
 import { ContactsTable } from "@/components/contacts-table";
 import { QueryParamMemory } from "@/components/query-param-memory";
 import { RowsPerPageSelect } from "@/components/rows-per-page-select";
@@ -97,22 +97,13 @@ export default async function ContactsPage({
             <Link
               key={tab.key}
               href={hrefFor(tab.key, 1, perPage)}
-              className={`contacts-tab ${activeTab === tab.key ? "contacts-tab-active" : ""}`}
+              className={`contacts-tab ${activeTab === tab.key ? "contacts-tab-active" : ""} ${tab.key === "unassigned" ? "contacts-tab-warning" : ""}`}
             >
               <span className="module-tab-icon" aria-hidden="true"><CrmIcon name={tab.key === "mine" ? "contacts" : tab.key === "all" ? "overview" : tab.key === "unassigned" ? "warning" : "activity"} className="crm-icon" /></span>
               <span>{tab.label}</span>
               <span className="contacts-badge">{tabCounts[tab.key]}</span>
             </Link>
           ))}
-          <Link href="/contacts/manage" className="contacts-edit">
-            <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="edit" className="crm-icon" /></span><span>Modificar contactos</span>
-          </Link>
-          <Link href="/contacts/new" className="contacts-add">
-            Añadir
-          </Link>
-          <Link href="/contacts/duplicates" className="contacts-tab contacts-tab-duplicates">
-            <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="warning" className="crm-icon" /></span><span>Posibles duplicados</span>
-          </Link>
         </div>
         <div className="contacts-toolbar card">
           <ContactsTable contacts={contacts} owners={owners ?? []} storageKeyPrefix={`user:${user.id}:contacts`} />
@@ -140,3 +131,5 @@ export default async function ContactsPage({
     </AppShell>
   );
 }
+
+

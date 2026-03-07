@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -18,7 +18,7 @@ import { DataTable } from "@/components/ui/data-table";
 import { CrmIcon } from "@/components/ui/crm-icon";
 
 type InvestorColumnKey = "id" | "name" | "category" | "website" | "strategy" | "status_name" | "sector" | "updated_at";
-type InvestorsViewMode = "table" | "panel";
+type InvestorsViewMode = "table";
 type InvestorsQuickFilter = "all" | "without_web" | "updated_7d";
 type ToastTone = "success" | "error" | "info";
 
@@ -91,7 +91,7 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
     currentFilters: { searchApplied, viewMode, quickFilter, columns: columnVisibility },
     onApply: (filters) => {
       const nextSearch = typeof filters.searchApplied === "string" ? filters.searchApplied : "";
-      const nextView = filters.viewMode === "panel" ? "panel" : "table";
+      const nextView = "table";
       const nextQuick =
         filters.quickFilter === "all" || filters.quickFilter === "without_web" || filters.quickFilter === "updated_7d"
           ? filters.quickFilter
@@ -156,16 +156,13 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
       header: INVESTOR_LABELS.name,
       cell: ({ row }) => (
         <div className="contact-name-cell">
-          <button className="contact-name-link" onClick={() => setSelected(row.original)}>
-            {displayInvestorValue(row.original, "name")}
-          </button>
           <button
             type="button"
-            className="contact-preview-trigger"
+            className="contact-name-link"
             onClick={() => setSelected(row.original)}
             aria-label={`Vista rápida de ${row.original.name}`}
           >
-            <span className="toolbar-button-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span>
+            {displayInvestorValue(row.original, "name")}
           </button>
         </div>
       )
@@ -253,9 +250,8 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
         <div className="entity-toolbar-inline">
           <div className="entity-toolbar-section entity-toolbar-view">
             <span className="entity-toolbar-section-title">Vista</span>
-            <select value={viewMode} onChange={(event) => setViewMode(event.target.value as InvestorsViewMode)}>
+            <select value={viewMode} onChange={() => setViewMode("table")}>
               <option value="table">Tabla</option>
-              <option value="panel">Panel</option>
             </select>
             <select
               value={selectedViewId}
@@ -351,38 +347,12 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
         </button>
       </div>
 
-      {viewMode === "panel" ? (
-        <div className="panel-grid">
-          {filteredInvestors.map((inv, index) => (
-            <motion.article
-              key={inv.id}
-              className="panel-card"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.18, delay: Math.min(index * 0.03, 0.18) }}
-            >
-              {table.getColumn("name")?.getIsVisible() ? (
-                <button className="contact-name-link" onClick={() => setSelected(inv)}>
-                  {displayInvestorValue(inv, "name")}
-                </button>
-              ) : null}
-              {COLUMN_ORDER.filter((key) => key !== "name" && table.getColumn(key)?.getIsVisible()).map((key) => (
-                <div key={key} className="muted">
-                  {INVESTOR_LABELS[key]}: {displayInvestorValue(inv, key)}
-                </div>
-              ))}
-            </motion.article>
-          ))}
-          {filteredInvestors.length === 0 ? <p className="muted">Sin cuentas.</p> : null}
-        </div>
-      ) : (
-        <DataTable
-          table={table}
-          emptyLabel="Sin cuentas."
-          emptyHint="Ajusta los filtros o crea una nueva cuenta para empezar a mover el pipeline."
-          className="companies-table-wrap"
-        />
-      )}
+      <DataTable
+        table={table}
+        emptyLabel="Sin cuentas."
+        emptyHint="Ajusta los filtros o crea una nueva cuenta para empezar a mover el pipeline."
+        className="companies-table-wrap"
+      />
 
       <Dialog.Root open={Boolean(selected)} onOpenChange={(open) => (!open ? setSelected(null) : null)}>
         <Dialog.Portal>

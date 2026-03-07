@@ -1,102 +1,57 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { StaticTable } from "@/components/ui/static-table";
 import { requireUser } from "@/lib/auth/session";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
 type SearchProps = {
   searchParams?: {
+    view?: string;
     ok?: string;
     error?: string;
-    tab?: string;
-    mine_type?: string;
-    status?: string;
-    type?: string;
-    q?: string;
-    sort_by?: string;
-    sort_dir?: string;
-    template?: string;
   };
 };
 
-const STATUS_OPTIONS = ["abierta", "en_revision", "planificada", "en_progreso", "resuelta", "descartada"] as const;
+type SuggestionRow = {
+  id: string;
+  suggestion_text: string;
+  suggestion_type: string | null;
+  status: string | null;
+  created_by_user_id: string;
+  created_by_email: string;
+  assigned_to_user_id: string | null;
+  assigned_to_email: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type SuggestionEventRow = {
+  id: string;
+  suggestion_id: string;
+  body: string;
+  event_type: string;
+  created_by_email: string;
+  created_at: string;
+};
+
+type UserOption = {
+  id: string;
+  full_name: string | null;
+  email: string;
+};
+
 const TYPE_OPTIONS = ["sugerencia", "bug", "nota"] as const;
-const PRIORITY_OPTIONS = ["baja", "media", "alta", "critica"] as const;
-const IMPACT_OPTIONS = ["local", "equipo", "global"] as const;
+const CLOSED_STATUS = ["resuelta", "descartada"] as const;
 
-type SuggestionsTab = "mine" | "mine_closed" | "all";
-type MineTypeFilter = "all" | "sugerencia" | "bug" | "nota";
-type StatusFilter = "all" | (typeof STATUS_OPTIONS)[number];
-type TypeFilter = "all" | (typeof TYPE_OPTIONS)[number];
-type SortBy = "priority" | "updated_at";
-type SortDir = "asc" | "desc";
-type TemplateKey = "none" | "mejora" | "bug" | "nota";
+type ViewMode = "mine" | "team" | "closed";
 
-const CLOSED_STATUS = ["resuelta", "descartada"];
-
-function normalizeTab(value: string | undefined): SuggestionsTab {
-  if (value === "mine" || value === "mine_closed" || value === "all") return value;
-  return "mine";
-}
-
-function normalizeMineType(value: string | undefined): MineTypeFilter {
-  if (value === "all" || value === "sugerencia" || value === "bug" || value === "nota") return value;
-  return "all";
-}
-
-function normalizeStatus(value: string | undefined): StatusFilter {
-  if (!value || value === "all") return "all";
-  return STATUS_OPTIONS.includes(value as (typeof STATUS_OPTIONS)[number]) ? (value as StatusFilter) : "all";
-}
-
-function normalizeType(value: string | undefined): TypeFilter {
-  if (!value || value === "all") return "all";
-  return TYPE_OPTIONS.includes(value as (typeof TYPE_OPTIONS)[number]) ? (value as TypeFilter) : "all";
-}
-
-function normalizeSortBy(value: string | undefined): SortBy {
-  if (value === "priority" || value === "updated_at") return value;
-  return "priority";
-}
-
-function normalizeSortDir(value: string | undefined): SortDir {
-  if (value === "asc" || value === "desc") return value;
-  return "desc";
-}
-
-function normalizeTemplate(value: string | undefined): TemplateKey {
-  if (value === "mejora" || value === "bug" || value === "nota") return value;
-  return "none";
-}
-
-function hrefWithFilters(params: {
-  tab: SuggestionsTab;
-  mineType: MineTypeFilter;
-  status: StatusFilter;
-  type: TypeFilter;
-  q: string;
-  sortBy: SortBy;
-  sortDir: SortDir;
-}) {
-  const url = new URLSearchParams();
-  url.set("tab", params.tab);
-  url.set("mine_type", params.mineType);
-  url.set("status", params.status);
-  url.set("type", params.type);
-  url.set("sort_by", params.sortBy);
-  url.set("sort_dir", params.sortDir);
-  if (params.q.trim()) url.set("q", params.q.trim());
-  return `/sugerencias?${url.toString()}`;
-}
-
-function cleanSuggestionText(rawText: string) {
-  return rawText
-    .replace(/\[Modulo:[^\]]+\]\s*/gi, "")
-    .replace(/\[Prioridad:[^\]]+\]\s*/gi, "")
-    .replace(/\[Impacto:[^\]]+\]\s*/gi, "")
-    .trim();
+function normalizeView(value: string | undefined, isAdmin: boolean): ViewMode {
+  if (value === "mine" || value === "team" || value === "closed") {
+    if (value === "team" && !isAdmin) return "mine";
+    return value;
+  }
+  return isAdmin ? "team" : "mine";
 }
 
 function statusChipClass(status: string | null | undefined): string {
@@ -104,629 +59,308 @@ function statusChipClass(status: string | null | undefined): string {
   return `crm-chip-status-${status}`;
 }
 
-function priorityChipClass(priority: string | null | undefined): string {
-  if (!priority) return "crm-chip-priority-media";
-  return `crm-chip-priority-${priority}`;
+function typeLabel(value: string | null | undefined): string {
+  if (value === "bug") return "Bug";
+  if (value === "nota") return "Nota";
+  return "Sugerencia";
 }
 
-function impactChipClass(impact: string | null | undefined): string {
-  if (!impact) return "crm-chip-impact-equipo";
-  return `crm-chip-impact-${impact}`;
+function userLabel(user: UserOption): string {
+  return user.full_name?.trim() || user.email;
 }
 
-function withResult(pathnameWithQuery: string, key: "ok" | "error", value: string): string {
-  const [basePath, rawQuery = ""] = pathnameWithQuery.split("?");
-  const params = new URLSearchParams(rawQuery);
+function withResult(pathname: string, key: "ok" | "error", value: string): string {
+  const params = new URLSearchParams();
   params.set(key, value);
-  return `${basePath}?${params.toString()}`;
-}
-
-function withTemplate(pathnameWithQuery: string, template: TemplateKey): string {
-  const [basePath, rawQuery = ""] = pathnameWithQuery.split("?");
-  const params = new URLSearchParams(rawQuery);
-  if (template === "none") {
-    params.delete("template");
-  } else {
-    params.set("template", template);
-  }
-  return `${basePath}?${params.toString()}`;
-}
-
-function templateDefaults(template: TemplateKey): {
-  type: "sugerencia" | "bug" | "nota";
-  priority: "baja" | "media" | "alta" | "critica";
-  impact: "local" | "equipo" | "global";
-  text: string;
-} {
-  if (template === "bug") {
-    return {
-      type: "bug",
-      priority: "alta",
-      impact: "equipo",
-      text: "Contexto:\nPasos para reproducir:\nResultado esperado:\nResultado actual:\nEntorno (navegador/dispositivo):\n"
-    };
-  }
-  if (template === "nota") {
-    return {
-      type: "nota",
-      priority: "media",
-      impact: "local",
-      text: "Contexto:\nObservacion:\nSiguiente paso sugerido:\n"
-    };
-  }
-  if (template === "mejora") {
-    return {
-      type: "sugerencia",
-      priority: "media",
-      impact: "equipo",
-      text: "Problema actual:\nMejora propuesta:\nBeneficio esperado:\n"
-    };
-  }
-  return {
-    type: "sugerencia",
-    priority: "media",
-    impact: "equipo",
-    text: ""
-  };
+  return `${pathname}?${params.toString()}`;
 }
 
 export default async function SugerenciasPage({ searchParams }: SearchProps) {
   const user = await requireUser();
   const db = createSourceCrmServerClient();
   const isAdmin = user.role === "admin";
-  const activeTab = normalizeTab(searchParams?.tab);
-  const mineType = normalizeMineType(searchParams?.mine_type);
-  const statusFilter = normalizeStatus(searchParams?.status);
-  const typeFilter = normalizeType(searchParams?.type);
-  const sortBy = normalizeSortBy(searchParams?.sort_by);
-  const sortDir = normalizeSortDir(searchParams?.sort_dir);
-  const selectedTemplate = normalizeTemplate(searchParams?.template);
-  const formDefaults = templateDefaults(selectedTemplate);
-  const q = String(searchParams?.q ?? "").trim();
+  const view = normalizeView(searchParams?.view, isAdmin);
+  const mineFilter = `created_by_user_id.eq.${user.id},assigned_to_user_id.eq.${user.id}`;
 
-  async function createSuggestionAction(formData: FormData) {
+  async function createEntryAction(formData: FormData) {
     "use server";
     const actor = await requireUser();
     const source = createSourceCrmServerClient();
+    const typeRaw = String(formData.get("suggestion_type") ?? "sugerencia").trim().toLowerCase();
+    const subject = String(formData.get("subject") ?? "").trim();
+    const body = String(formData.get("body") ?? "").trim();
+    const assignedUserIdRaw = String(formData.get("assigned_to_user_id") ?? "").trim();
 
-    const text = String(formData.get("suggestion_text") ?? "").trim();
-    const suggestionTypeRaw = String(formData.get("suggestion_type") ?? "sugerencia").trim().toLowerCase();
-    const priorityRaw = String(formData.get("priority_level") ?? "media").trim().toLowerCase();
-    const impactRaw = String(formData.get("impact_scope") ?? "equipo").trim().toLowerCase();
+    const suggestionType = TYPE_OPTIONS.includes(typeRaw as (typeof TYPE_OPTIONS)[number]) ? typeRaw : "sugerencia";
 
-    const suggestionType = TYPE_OPTIONS.includes(suggestionTypeRaw as (typeof TYPE_OPTIONS)[number]) ? suggestionTypeRaw : "sugerencia";
-    const priorityLevel = PRIORITY_OPTIONS.includes(priorityRaw as (typeof PRIORITY_OPTIONS)[number]) ? priorityRaw : "media";
-    const impactScope = IMPACT_OPTIONS.includes(impactRaw as (typeof IMPACT_OPTIONS)[number]) ? impactRaw : "equipo";
+    if (!subject || !body) {
+      redirect(withResult("/sugerencias", "error", "missing_fields"));
+    }
 
-    if (!text) {
-      redirect("/sugerencias?error=entrada_vacia");
+    let assignedToUserId: string | null = assignedUserIdRaw || null;
+    let assignedToEmail: string | null = null;
+
+    if (assignedToUserId) {
+      const { data: assignedUser } = await source.from("users").select("id, email").eq("id", assignedToUserId).maybeSingle();
+      if (!assignedUser?.id || !assignedUser.email) {
+        redirect(withResult("/sugerencias", "error", "invalid_assignee"));
+      }
+      assignedToEmail = assignedUser.email;
     }
 
     const created = await source
       .from("suggestions")
       .insert({
-        suggestion_text: text,
+        suggestion_text: `${subject}\n\n${body}`,
         suggestion_type: suggestionType,
-        priority_level: priorityLevel,
-        impact_scope: impactScope,
         status: "abierta",
         created_by_user_id: actor.id,
         created_by_email: actor.email,
+        assigned_to_user_id: assignedToUserId,
+        assigned_to_email: assignedToEmail,
         updated_at: new Date().toISOString()
       })
       .select("id")
       .single();
 
     if (created.error || !created.data) {
-      redirect(`/sugerencias?error=${encodeURIComponent(created.error?.message ?? "create_failed")}`);
+      redirect(withResult("/sugerencias", "error", "create_failed"));
     }
 
     await source.from("suggestion_events").insert({
       suggestion_id: created.data.id,
-      event_type: "creaci\u00f3n",
-      body: "Entrada creada",
+      event_type: "creacion",
+      body: assignedToEmail ? `Entrada creada y asignada a ${assignedToEmail}` : "Entrada creada",
       created_by_user_id: actor.id,
       created_by_email: actor.email
     });
 
     revalidatePath("/sugerencias");
-    redirect("/sugerencias?ok=created");
+    redirect(`/sugerencias/${created.data.id}?ok=created`);
   }
 
-  async function updateStatusAction(formData: FormData) {
-    "use server";
-    const actor = await requireUser();
-    const source = createSourceCrmServerClient();
-    const suggestionId = String(formData.get("suggestion_id") ?? "").trim();
-    const status = String(formData.get("status") ?? "").trim();
-    const statusReason = String(formData.get("status_reason") ?? "").trim();
-    if (!suggestionId || !STATUS_OPTIONS.includes(status as (typeof STATUS_OPTIONS)[number])) return;
-    const currentRes = await source.from("suggestions").select("status").eq("id", suggestionId).maybeSingle();
-    const currentStatus = currentRes.data?.status ?? "";
-    const isReopen = CLOSED_STATUS.includes(currentStatus) && !CLOSED_STATUS.includes(status);
-    if (isReopen && !statusReason) {
-      redirect("/sugerencias?error=reabrir_requiere_motivo");
-    }
-
-    const updated = await source
-      .from("suggestions")
-      .update({
-        status,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", suggestionId);
-    if (updated.error) return;
-
-    await source.from("suggestion_events").insert({
-      suggestion_id: suggestionId,
-      event_type: "cambio_estado",
-      body: isReopen
-        ? `Entrada reabierta a: ${status}. Motivo obligatorio: ${statusReason}`
-        : statusReason
-          ? `Estado actualizado a: ${status}. Motivo: ${statusReason}`
-          : `Estado actualizado a: ${status}`,
-      created_by_user_id: actor.id,
-      created_by_email: actor.email
-    });
-
-    revalidatePath("/sugerencias");
-  }
-
-  async function batchAction(formData: FormData) {
-    "use server";
-    const actor = await requireUser();
-    const source = createSourceCrmServerClient();
-    const returnToRaw = String(formData.get("return_to") ?? "/sugerencias");
-    const returnTo = returnToRaw.startsWith("/sugerencias") ? returnToRaw : "/sugerencias";
-
-    if (actor.role !== "admin") {
-      redirect(withResult(returnTo, "error", "batch_forbidden"));
-    }
-
-    const suggestionIds = Array.from(
-      new Set(
-        formData
-          .getAll("suggestion_ids")
-          .map((id) => String(id).trim())
-          .filter(Boolean)
-      )
-    );
-    if (suggestionIds.length === 0) {
-      redirect(withResult(returnTo, "error", "batch_empty_selection"));
-    }
-
-    const action = String(formData.get("batch_action") ?? "close").trim();
-    const nowIso = new Date().toISOString();
-
-    if (action === "close" || action === "status") {
-      const targetStatusRaw = action === "close" ? "resuelta" : String(formData.get("batch_status") ?? "").trim();
-      if (!STATUS_OPTIONS.includes(targetStatusRaw as (typeof STATUS_OPTIONS)[number])) {
-        redirect(withResult(returnTo, "error", "batch_invalid_status"));
-      }
-
-      const updateRes = await source
-        .from("suggestions")
-        .update({ status: targetStatusRaw, updated_at: nowIso })
-        .in("id", suggestionIds);
-      if (updateRes.error) {
-        redirect(withResult(returnTo, "error", "batch_update_failed"));
-      }
-
-      const eventsPayload = suggestionIds.map((suggestionId) => ({
-        suggestion_id: suggestionId,
-        event_type: "cambio_estado",
-        body: `Cambio en lote: estado actualizado a ${targetStatusRaw}`,
-        created_by_user_id: actor.id,
-        created_by_email: actor.email
-      }));
-      await source.from("suggestion_events").insert(eventsPayload);
-
-      revalidatePath("/sugerencias");
-      redirect(withResult(returnTo, "ok", "batch_status_updated"));
-    }
-
-    if (action === "tag") {
-      const rawTag = String(formData.get("batch_tag") ?? "").trim().toLowerCase();
-      const normalizedTag = rawTag.replace(/\s+/g, "_").replace(/[^a-z0-9_-]/g, "").slice(0, 40);
-      if (!normalizedTag) {
-        redirect(withResult(returnTo, "error", "batch_invalid_tag"));
-      }
-
-      const selectedRes = await source.from("suggestions").select("id, tags").in("id", suggestionIds);
-      if (selectedRes.error || !selectedRes.data) {
-        redirect(withResult(returnTo, "error", "batch_load_failed"));
-      }
-
-      for (const row of selectedRes.data) {
-        const currentTags = Array.isArray(row.tags) ? row.tags : [];
-        const nextTags = Array.from(new Set([...currentTags, normalizedTag]));
-        const upRes = await source.from("suggestions").update({ tags: nextTags, updated_at: nowIso }).eq("id", row.id);
-        if (upRes.error) {
-          redirect(withResult(returnTo, "error", "batch_tag_failed"));
-        }
-      }
-
-      const tagEventsPayload = suggestionIds.map((suggestionId) => ({
-        suggestion_id: suggestionId,
-        event_type: "nota",
-        body: `Etiqueta a\u00f1adida en lote: ${normalizedTag}`, 
-        created_by_user_id: actor.id,
-        created_by_email: actor.email
-      }));
-      await source.from("suggestion_events").insert(tagEventsPayload);
-
-      revalidatePath("/sugerencias");
-      redirect(withResult(returnTo, "ok", "batch_tag_added"));
-    }
-
-    redirect(withResult(returnTo, "error", "batch_invalid_action"));
-  }
-
-  let suggestionsQuery = db
+  let query = db
     .from("suggestions")
-    .select("id, suggestion_text, suggestion_type, priority_level, impact_scope, tags, status, created_by_email, created_by_user_id, created_at, updated_at")
+    .select("id, suggestion_text, suggestion_type, status, created_by_user_id, created_by_email, assigned_to_user_id, assigned_to_email, created_at, updated_at")
     .order("updated_at", { ascending: false })
-    .limit(300);
+    .limit(120);
 
-  if (activeTab === "mine") {
-    suggestionsQuery = suggestionsQuery.eq("created_by_user_id", user.id).not("status", "in", `(${CLOSED_STATUS.join(",")})`);
-  } else if (activeTab === "mine_closed") {
-    suggestionsQuery = suggestionsQuery.eq("created_by_user_id", user.id).in("status", CLOSED_STATUS);
-  }
-
-  if ((activeTab === "mine" || activeTab === "mine_closed") && mineType !== "all") {
-    suggestionsQuery = suggestionsQuery.eq("suggestion_type", mineType);
-  }
-  if (statusFilter !== "all") suggestionsQuery = suggestionsQuery.eq("status", statusFilter);
-  if (typeFilter !== "all") suggestionsQuery = suggestionsQuery.eq("suggestion_type", typeFilter);
-  if (q) suggestionsQuery = suggestionsQuery.ilike("suggestion_text", `%${q}%`);
-
-  const [{ data: suggestionsRaw }, adminsRes] =
-    await Promise.all([
-      suggestionsQuery,
-      db.from("users").select("id").eq("role", "admin").eq("is_active", true)
-    ]);
-
-  const priorityRank: Record<string, number> = { baja: 1, media: 2, alta: 3, critica: 4 };
-  const ts = (value: string | null | undefined) => new Date(value ?? "").getTime() || 0;
-  const pr = (value: string | null | undefined) => priorityRank[value ?? ""] ?? 0;
-  const suggestions = [...(suggestionsRaw ?? [])].sort((a, b) => {
-    if (sortBy === "priority") {
-      const byPriority = pr(a.priority_level) - pr(b.priority_level);
-      if (byPriority !== 0) return sortDir === "asc" ? byPriority : -byPriority;
-      return ts(b.updated_at) - ts(a.updated_at);
-    }
-
-    const byUpdated = ts(a.updated_at) - ts(b.updated_at);
-    if (byUpdated !== 0) return sortDir === "asc" ? byUpdated : -byUpdated;
-    return pr(b.priority_level) - pr(a.priority_level);
-  });
-
-  const adminIds = new Set((adminsRes.data ?? []).map((a) => a.id));
-  const suggestionIds = (suggestions ?? []).map((s) => s.id);
-  const eventsRes =
-    suggestionIds.length > 0
-      ? await db
-          .from("suggestion_events")
-          .select("id, suggestion_id, event_type, created_by_user_id, created_at")
-          .in("suggestion_id", suggestionIds)
-          .order("created_at", { ascending: false })
-      : { data: [] as Array<{ id: string; suggestion_id: string; event_type: string; created_by_user_id: string; created_at: string }> };
-  const events = eventsRes.data ?? [];
-
-  const eventsBySuggestion = new Map<string, typeof events>();
-  events.forEach((ev) => {
-    const arr = eventsBySuggestion.get(ev.suggestion_id) ?? [];
-    arr.push(ev);
-    eventsBySuggestion.set(ev.suggestion_id, arr);
-  });
-
-  let respondedCount = 0;
-  let pendingCount = 0;
-  let totalFirstResponseHours = 0;
-  let ageOver7dOpen = 0;
-
-  (suggestions ?? []).forEach((s) => {
-    const list = eventsBySuggestion.get(s.id) ?? [];
-    const createdAtMs = new Date(s.created_at).getTime();
-    const firstAdminResponse = list
-      .filter((ev) => adminIds.has(ev.created_by_user_id) && ev.event_type !== "creaci\u00f3n")
-      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())[0];
-
-    if (firstAdminResponse) {
-      respondedCount += 1;
-      const hours = (new Date(firstAdminResponse.created_at).getTime() - createdAtMs) / (1000 * 60 * 60);
-      if (Number.isFinite(hours) && hours >= 0) totalFirstResponseHours += hours;
+  if (view === "mine") {
+    query = query.or(mineFilter).not("status", "in", `(${CLOSED_STATUS.join(",")})`);
+  } else if (view === "closed") {
+    if (isAdmin) {
+      query = query.in("status", [...CLOSED_STATUS]);
     } else {
-      pendingCount += 1;
+      query = query.or(mineFilter).in("status", [...CLOSED_STATUS]);
     }
-
-    if (!CLOSED_STATUS.includes(s.status)) {
-      const daysOpen = (Date.now() - createdAtMs) / (1000 * 60 * 60 * 24);
-      if (daysOpen >= 7) ageOver7dOpen += 1;
-    }
-  });
-
-  const avgFirstResponseHours = respondedCount > 0 ? totalFirstResponseHours / respondedCount : 0;
-
-  const typeCountsVisible = {
-    sugerencia: (suggestions ?? []).filter((s) => s.suggestion_type === "sugerencia").length,
-    bug: (suggestions ?? []).filter((s) => s.suggestion_type === "bug").length,
-    nota: (suggestions ?? []).filter((s) => s.suggestion_type === "nota").length
-  };
-  const statusCountsVisible = {
-    abierta: (suggestions ?? []).filter((s) => s.status === "abierta").length,
-    en_progreso: (suggestions ?? []).filter((s) => s.status === "en_progreso").length,
-    resuelta: (suggestions ?? []).filter((s) => s.status === "resuelta").length
-  };
-
-  const sortIndicator = (column: SortBy) => (sortBy === column ? (sortDir === "desc" ? "â†“" : "â†‘") : "â†•");
-  const sortHref = (column: SortBy) =>
-    hrefWithFilters({
-      tab: activeTab,
-      mineType,
-      status: statusFilter,
-      type: typeFilter,
-      q,
-      sortBy: column,
-      sortDir: sortBy === column && sortDir === "desc" ? "asc" : "desc"
-    });
-  const baseFiltersHref = hrefWithFilters({
-    tab: activeTab,
-    mineType,
-    status: statusFilter,
-    type: typeFilter,
-    q,
-      sortBy,
-      sortDir
-    });
-  function customViewHref(view: "mine_sug_closed" | "all_sug" | "mine_note_closed" | "all_note" | "mine_bug_closed" | "all_bug"): string {
-    if (view === "mine_sug_closed") {
-      return hrefWithFilters({ tab: "mine_closed", mineType: "sugerencia", status: "all", type: "all", q, sortBy, sortDir });
-    }
-    if (view === "all_sug") {
-      return hrefWithFilters({ tab: "all", mineType: "all", status: "all", type: "sugerencia", q, sortBy, sortDir });
-    }
-    if (view === "mine_note_closed") {
-      return hrefWithFilters({ tab: "mine_closed", mineType: "nota", status: "all", type: "all", q, sortBy, sortDir });
-    }
-    if (view === "all_note") {
-      return hrefWithFilters({ tab: "all", mineType: "all", status: "all", type: "nota", q, sortBy, sortDir });
-    }
-    if (view === "mine_bug_closed") {
-      return hrefWithFilters({ tab: "mine_closed", mineType: "bug", status: "all", type: "all", q, sortBy, sortDir });
-    }
-    return hrefWithFilters({ tab: "all", mineType: "all", status: "all", type: "bug", q, sortBy, sortDir });
+  } else if (!isAdmin) {
+    query = query.or(mineFilter).not("status", "in", `(${CLOSED_STATUS.join(",")})`);
+  } else {
+    query = query.not("status", "in", `(${CLOSED_STATUS.join(",")})`);
   }
-  function currentCustomViewLabel(): string {
-    if (activeTab === "mine_closed" && mineType === "sugerencia") return "Mis Sugerencias cerradas";
-    if (activeTab === "all" && typeFilter === "sugerencia") return "Todas las Sugerencias";
-    if (activeTab === "mine_closed" && mineType === "nota") return "Mis Notas cerradas";
-    if (activeTab === "all" && typeFilter === "nota") return "Todas las Notas";
-    if (activeTab === "mine_closed" && mineType === "bug") return "Mis Bugs cerrados";
-    if (activeTab === "all" && typeFilter === "bug") return "Todos los Bugs";
-    return "Vista Personalizada";
+
+  const [{ data: suggestionsData }, { data: usersData }] = await Promise.all([
+    query,
+    db.from("users").select("id, full_name, email").eq("is_active", true).order("email", { ascending: true })
+  ]);
+
+  const suggestions: SuggestionRow[] = suggestionsData ?? [];
+  const users: UserOption[] = usersData ?? [];
+  const suggestionIds = suggestions.map((item) => item.id);
+
+  const events: SuggestionEventRow[] =
+    suggestionIds.length > 0
+      ? ((
+          await db
+            .from("suggestion_events")
+            .select("id, suggestion_id, body, event_type, created_by_email, created_at")
+            .in("suggestion_id", suggestionIds)
+            .order("created_at", { ascending: false })
+        ).data ?? [])
+      : [];
+
+  const eventsBySuggestion = new Map<string, SuggestionEventRow[]>();
+  for (const event of events) {
+    const group = eventsBySuggestion.get(event.suggestion_id) ?? [];
+    group.push(event);
+    eventsBySuggestion.set(event.suggestion_id, group);
   }
+
+  const openItems = suggestions.filter((item) => !CLOSED_STATUS.includes(item.status as (typeof CLOSED_STATUS)[number]));
+  const closedItems = suggestions.filter((item) => CLOSED_STATUS.includes(item.status as (typeof CLOSED_STATUS)[number]));
+  const bugsCount = suggestions.filter((item) => item.suggestion_type === "bug").length;
 
   return (
-    <AppShell title="Sugerencias, Bugs y Notas" subtitle="Mejoras, incidencias y notas con una superficie mas cuidada" canViewGlobal={user.can_view_global_dashboard}>
-      <div className="editor-shell">
-        <section className="card editor-hero editor-hero-warm">
-          <div>
-            <p className="workspace-kicker">Producto</p>
-            <h2>Ideas, incidencias y notas en una sola bandeja</h2>
-            <p className="muted">La gestion de sugerencias comparte ahora la misma jerarquia visual que el resto del CRM: alta clara, filtros ordenados y seguimiento sin sensacion de backoffice duro.</p>
-          </div>
-          <div className="stats-grid">
-            <div className="card">
-              <strong>{(suggestions ?? []).length}</strong>
-              <div className="muted">Entradas visibles</div>
+    <AppShell
+      title="Sugerencias y bugs"
+      subtitle="Una bandeja simple para sugerencias, bugs, notas, responsable y mensajes internos"
+      canViewGlobal={user.can_view_global_dashboard}
+    >
+      <div className="stack">
+        <section className="card">
+          <div className="row" style={{ alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 320px" }}>
+              <p className="workspace-kicker">Canal interno</p>
+              <h2 style={{ marginTop: 0 }}>Abre una entrada, asigna responsable y sigue la conversacion</h2>
+              <p className="muted" style={{ marginBottom: 0 }}>
+                Cada entrada puede ser una sugerencia, un bug o una nota. Ahora tambien puedes dejar un responsable
+                desde el alta y reasignarlo dentro del hilo.
+              </p>
             </div>
-            <div className="card">
-              <strong>{statusCountsVisible.abierta}</strong>
-              <div className="muted">Abiertas</div>
-            </div>
-            <div className="card">
-              <strong>{statusCountsVisible.en_progreso}</strong>
-              <div className="muted">En progreso</div>
-            </div>
-            <div className="card">
-              <strong>{statusCountsVisible.resuelta}</strong>
-              <div className="muted">Resueltas</div>
-            </div>
-            <div className="card">
-              <strong>{typeCountsVisible.bug}</strong>
-              <div className="muted">Bugs visibles</div>
-            </div>
-            <div className="card">
-              <strong>{avgFirstResponseHours.toFixed(1)} h</strong>
-              <div className="muted">Media 1a respuesta</div>
-            </div>
-            <div className="card">
-              <strong>{pendingCount}</strong>
-              <div className="muted">Sin respuesta admin</div>
-            </div>
-            <div className="card">
-              <strong>{ageOver7dOpen}</strong>
-              <div className="muted">Abiertas +7 dias</div>
+            <div className="stats-grid" style={{ flex: "1 1 320px" }}>
+              <div className="card">
+                <strong>{openItems.length}</strong>
+                <div className="muted">Abiertas</div>
+              </div>
+              <div className="card">
+                <strong>{bugsCount}</strong>
+                <div className="muted">Bugs visibles</div>
+              </div>
+              <div className="card">
+                <strong>{closedItems.length}</strong>
+                <div className="muted">Cerradas</div>
+              </div>
             </div>
           </div>
         </section>
 
-        {searchParams?.ok === "created" ? <div className="notice notice-success">Entrada creada correctamente.</div> : null}
-        {searchParams?.ok === "batch_status_updated" ? <div className="notice notice-success">Lote aplicado: estado actualizado.</div> : null}
-        {searchParams?.ok === "batch_tag_added" ? <div className="notice notice-success">Lote aplicado: etiqueta anadida.</div> : null}
-        {searchParams?.error ? <div className="notice notice-error">Error: {searchParams.error}</div> : null}
-
-        <section className="card editor-card">
-          <div className="table-card-head">
-            <div>
-              <p className="workspace-kicker">Nueva entrada</p>
-              <h3>Registrar mejora, bug o nota</h3>
-            </div>
-          </div>
-          <div className="contacts-top-tabs">
-            <Link href={withTemplate(baseFiltersHref, "mejora")} className={selectedTemplate === "mejora" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>Plantilla mejora</Link>
-            <Link href={withTemplate(baseFiltersHref, "bug")} className={selectedTemplate === "bug" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>Plantilla bug</Link>
-            <Link href={withTemplate(baseFiltersHref, "nota")} className={selectedTemplate === "nota" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>Plantilla nota</Link>
-            <Link href={withTemplate(baseFiltersHref, "none")} className={selectedTemplate === "none" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>Sin plantilla</Link>
-          </div>
-          <form action={createSuggestionAction} className="editor-stack" style={{ maxWidth: 920 }}>
-            <div className="editor-form-grid editor-form-grid-3">
-              <label className="form-field">
-                <span>Tipo</span>
-                <select name="suggestion_type" defaultValue={formDefaults.type}>
+        <section className="card">
+          <div className="row" style={{ alignItems: "flex-start", gap: 24, flexWrap: "wrap" }}>
+            <form action={createEntryAction} className="stack" style={{ flex: "1 1 380px", minWidth: 320 }}>
+              <h3 style={{ marginTop: 0 }}>Nueva entrada</h3>
+              <label>
+                Tipo
+                <select name="suggestion_type" defaultValue="sugerencia" aria-label="Tipo de entrada">
                   <option value="sugerencia">Sugerencia</option>
                   <option value="bug">Bug</option>
                   <option value="nota">Nota</option>
                 </select>
               </label>
-              <label className="form-field">
-                <span>Prioridad</span>
-                <select name="priority_level" defaultValue={formDefaults.priority}>
-                  {PRIORITY_OPTIONS.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
+              <label>
+                Asunto
+                <input name="subject" placeholder="Ej. Error al guardar una actividad" aria-label="Asunto" required />
+              </label>
+              <label>
+                Responsable
+                <select name="assigned_to_user_id" defaultValue={user.id} aria-label="Responsable inicial">
+                  <option value="">Sin responsable</option>
+                  {users.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {userLabel(option)}
                     </option>
                   ))}
                 </select>
               </label>
-              <label className="form-field">
-                <span>Impacto</span>
-                <select name="impact_scope" defaultValue={formDefaults.impact}>
-                  {IMPACT_OPTIONS.map((i) => (
-                    <option key={i} value={i}>
-                      {i}
-                    </option>
-                  ))}
-                </select>
+              <label>
+                Mensaje inicial
+                <textarea
+                  name="body"
+                  rows={6}
+                  placeholder="Explica que pasa, que propones o que nota quieres dejar..."
+                  aria-label="Mensaje inicial"
+                  required
+                />
               </label>
+              <button type="submit">Crear hilo</button>
+            </form>
+
+            <div style={{ flex: "1 1 320px", minWidth: 320 }}>
+              <h3 style={{ marginTop: 0 }}>Vistas</h3>
+              <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+                <Link href="/sugerencias?view=mine" className={view === "mine" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>
+                  Mis abiertas
+                </Link>
+                {isAdmin ? (
+                  <Link href="/sugerencias?view=team" className={view === "team" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>
+                    Bandeja equipo
+                  </Link>
+                ) : null}
+                <Link href="/sugerencias?view=closed" className={view === "closed" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>
+                  Cerradas
+                </Link>
+              </div>
+              <p className="muted" style={{ marginBottom: 0 }}>
+                {view === "mine"
+                  ? "Entradas creadas por ti o asignadas a ti."
+                  : view === "team"
+                    ? "Conversaciones abiertas para seguimiento del equipo."
+                    : "Entradas resueltas o descartadas."}
+              </p>
+              {searchParams?.ok === "created" ? <p className="crm-inline-success">Entrada creada.</p> : null}
+              {searchParams?.error === "missing_fields" ? <p className="crm-inline-error">Completa asunto y mensaje.</p> : null}
+              {searchParams?.error === "invalid_assignee" ? <p className="crm-inline-error">Responsable no valido.</p> : null}
+              {searchParams?.error === "create_failed" ? <p className="crm-inline-error">No se pudo crear la entrada.</p> : null}
             </div>
-            <textarea name="suggestion_text" rows={5} placeholder="Describe la mejora, incidencia o nota con el mayor contexto posible" defaultValue={formDefaults.text} required />
-            <div className="form-actions-bar form-actions-bar-start">
-              <button type="submit">Anadir entrada</button>
-            </div>
-          </form>
+          </div>
         </section>
 
-        <section className="card editor-card">
-          <div style={{ marginBottom: 10 }}>
-            <details className="entity-toolbar-menu">
-              <summary aria-label="Abrir vista personalizada">{currentCustomViewLabel()} ▼</summary>
-              <div className="entity-toolbar-menu-panel">
-                <Link href={customViewHref("mine_sug_closed")} className="contacts-tab">Mis sugerencias cerradas</Link>
-                <Link href={customViewHref("all_sug")} className="contacts-tab">Todas las sugerencias</Link>
-                <Link href={customViewHref("mine_note_closed")} className="contacts-tab">Mis notas cerradas</Link>
-                <Link href={customViewHref("all_note")} className="contacts-tab">Todas las notas</Link>
-                <Link href={customViewHref("mine_bug_closed")} className="contacts-tab">Mis bugs cerrados</Link>
-                <Link href={customViewHref("all_bug")} className="contacts-tab">Todos los bugs</Link>
-              </div>
-            </details>
+        <section className="card">
+          <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+            <h3 style={{ margin: 0 }}>
+              {view === "mine" ? "Mis conversaciones" : view === "team" ? "Bandeja del equipo" : "Conversaciones cerradas"}
+            </h3>
+            <span className="muted">{suggestions.length} entradas</span>
           </div>
 
-          <form method="get" className="entity-toolbar form-toolbar-surface" style={{ marginBottom: 10 }}>
-            <input type="hidden" name="tab" value={activeTab} />
-            <input type="hidden" name="mine_type" value={mineType} />
-            <input type="hidden" name="sort_by" value={sortBy} />
-            <input type="hidden" name="sort_dir" value={sortDir} />
-            <input className="toolbar-search" name="q" defaultValue={q} placeholder="Buscar por contenido o contexto" aria-label="Buscar por contenido" />
-            <label className="form-field">
-              <span>Estado</span>
-              <select name="status" defaultValue={statusFilter}>
-                <option value="all">Todos</option>
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="form-field">
-              <span>Tipo</span>
-              <select name="type" defaultValue={typeFilter}>
-                <option value="all">Todos</option>
-                {TYPE_OPTIONS.map((t) => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="submit">Aplicar</button>
-            <Link href={hrefWithFilters({ tab: activeTab, mineType, status: "all", type: "all", q: "", sortBy, sortDir })} className="contacts-tab">Limpiar</Link>
-          </form>
+          <div className="stack" style={{ marginTop: 16 }}>
+            {suggestions.map((item) => {
+              const [subjectLine, ...bodyLines] = item.suggestion_text.split(/\r?\n/);
+              const threadEvents = eventsBySuggestion.get(item.id) ?? [];
+              const lastMessage = threadEvents[0];
+              const previewSource = bodyLines.join(" ").trim() || subjectLine.trim();
 
-          <div className="table-card-head"><div><p className="workspace-kicker">Seguimiento</p><h3>Listado y seguimiento</h3></div></div>
+              return (
+                <article key={item.id} className="card" style={{ padding: 18 }}>
+                  <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
+                    <div style={{ flex: "1 1 420px" }}>
+                      <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+                        <span className="crm-chip">{typeLabel(item.suggestion_type)}</span>
+                        <span className={`crm-chip ${statusChipClass(item.status)}`}>{item.status}</span>
+                      </div>
+                      <h4 style={{ margin: "0 0 8px" }}>{subjectLine.trim() || "Sin asunto"}</h4>
+                      <p className="muted" style={{ margin: "0 0 8px" }}>
+                        {previewSource.length > 180 ? `${previewSource.slice(0, 180)}...` : previewSource}
+                      </p>
+                      <p className="muted" style={{ margin: 0 }}>
+                        Responsable: {item.assigned_to_email ?? "Sin responsable"}
+                      </p>
+                    </div>
+                    <div style={{ minWidth: 220 }}>
+                      <p style={{ margin: "0 0 8px" }}>
+                        <strong>Creador:</strong> {item.created_by_email}
+                      </p>
+                      <p style={{ margin: "0 0 8px" }}>
+                        <strong>Actualizada:</strong> {new Date(item.updated_at).toLocaleString("es-ES")}
+                      </p>
+                      <p style={{ margin: "0 0 12px" }}>
+                        <strong>Mensajes:</strong> {threadEvents.filter((event) => event.event_type !== "creacion").length}
+                      </p>
+                      <Link href={`/sugerencias/${item.id}`} className="contacts-tab">
+                        Abrir hilo
+                      </Link>
+                    </div>
+                  </div>
 
-          {isAdmin ? (
-            <form id="batch-form" action={batchAction} className="entity-toolbar form-toolbar-surface" style={{ marginBottom: 10 }}>
-              <input type="hidden" name="return_to" value={hrefWithFilters({ tab: activeTab, mineType, status: statusFilter, type: typeFilter, q, sortBy, sortDir })} />
-              <label className="form-field">
-                <span>Accion en lote</span>
-                <select name="batch_action" defaultValue="close">
-                  <option value="close">Cerrar (resuelta)</option>
-                  <option value="status">Cambiar estado</option>
-                  <option value="tag">Etiquetar</option>
-                </select>
-              </label>
-              <label className="form-field">
-                <span>Estado destino</span>
-                <select name="batch_status" defaultValue="en_progreso">
-                  {STATUS_OPTIONS.map((status) => (
-                    <option key={status} value={status}>
-                      {status}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="form-field">
-                <span>Etiqueta</span>
-                <input name="batch_tag" placeholder="ej: ux, urgente, backend" />
-              </label>
-              <button type="submit">Aplicar a seleccion</button>
-              <span className="muted">Solo admin. Selecciona filas en la primera columna.</span>
-            </form>
-          ) : null}
-
-          <StaticTable
-            columns={isAdmin
-              ? ["Sel", "Usuario", "Tipo", "Prioridad", "Impacto", "Etiquetas", "Entrada", "Estado", "Ultima actividad", "Historial"]
-              : ["Usuario", "Tipo", "Prioridad", "Impacto", "Etiquetas", "Entrada", "Estado", "Ultima actividad", "Historial"]}
-            rows={(suggestions ?? []).map((s) => {
-              const cleanText = cleanSuggestionText(s.suggestion_text);
-              const latestEvent = (eventsBySuggestion.get(s.id) ?? [])[0];
-              const cells = [
-                s.created_by_email,
-                s.suggestion_type ?? "sugerencia",
-                <span className={`crm-chip ${priorityChipClass(s.priority_level)}`}>{s.priority_level ?? "--"}</span>,
-                <span className={`crm-chip ${impactChipClass(s.impact_scope)}`}>{s.impact_scope ?? "--"}</span>,
-                Array.isArray(s.tags) && s.tags.length > 0 ? s.tags.join(", ") : "--",
-                <Link href={`/sugerencias/${encodeURIComponent(s.id)}`}>{cleanText.length > 130 ? `${cleanText.slice(0, 130)}...` : cleanText}</Link>,
-                <div className="stack" style={{ gap: 6 }}>
-                  <span className={`crm-chip ${statusChipClass(s.status)}`}>{s.status}</span>
-                  <form action={updateStatusAction} className="inline-form-grid">
-                    <input type="hidden" name="suggestion_id" value={s.id} />
-                    <select name="status" defaultValue={s.status}>
-                      {STATUS_OPTIONS.map((status) => (
-                        <option key={status} value={status}>
-                          {status}
-                        </option>
-                      ))}
-                    </select>
-                    <input name="status_reason" placeholder="Motivo si reabres" />
-                    <button type="submit">Guardar</button>
-                  </form>
-                </div>,
-                latestEvent ? new Date(latestEvent.created_at).toLocaleString("es-ES") : new Date(s.updated_at).toLocaleString("es-ES"),
-                <Link href={`/sugerencias/${encodeURIComponent(s.id)}`} className="contacts-tab">Ver historial</Link>
-              ];
-              return isAdmin
-                ? [<input form="batch-form" type="checkbox" name="suggestion_ids" value={s.id} aria-label={`Seleccionar ${s.id}`} />, ...cells]
-                : cells;
+                  {lastMessage ? (
+                    <div className="card" style={{ marginTop: 14, padding: 14 }}>
+                      <p className="muted" style={{ margin: 0 }}>
+                        Ultimo movimiento: {lastMessage.created_by_email} | {new Date(lastMessage.created_at).toLocaleString("es-ES")}
+                      </p>
+                      <p style={{ margin: "6px 0 0" }}>
+                        {lastMessage.body.length > 140 ? `${lastMessage.body.slice(0, 140)}...` : lastMessage.body}
+                      </p>
+                    </div>
+                  ) : null}
+                </article>
+              );
             })}
-            emptyLabel="No hay resultados para los filtros actuales."
-            emptyHint="Ajusta la vista, cambia filtros o registra una nueva entrada para empezar a trabajar sobre ella."
-          />
+
+            {suggestions.length === 0 ? (
+              <div className="card">
+                <p style={{ margin: 0 }}>No hay entradas en esta vista.</p>
+              </div>
+            ) : null}
+          </div>
         </section>
       </div>
     </AppShell>

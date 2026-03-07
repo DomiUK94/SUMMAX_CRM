@@ -53,10 +53,6 @@ export default async function InvestorsPage({
           <button className="companies-tab companies-tab-active">
             <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="companies" className="crm-icon" /></span><span>Todas las cuentas</span> <span className="companies-badge">{totalCount}</span>
           </button>
-          <Link href="/investors/manage" className="companies-edit">
-            <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="edit" className="crm-icon" /></span><span>Modificar datos cuentas</span>
-          </Link>
-          <button className="companies-add">Añadir</button>
         </div>
         <div className="companies-toolbar card">
           <InvestorsTable investors={investors} storageKeyPrefix={`user:${user.id}:investors`} />
@@ -84,3 +80,4 @@ export default async function InvestorsPage({
     </AppShell>
   );
 }
+

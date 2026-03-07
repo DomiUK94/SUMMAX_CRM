@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -241,16 +241,8 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
       header: DEAL_LABELS.name,
       cell: ({ row }) => (
         <div className="contact-name-cell">
-          <button className="contact-name-link" onClick={() => setSelectedDeal({ stage: row.original.stage, card: row.original.card })}>
+          <button type="button" className="contact-name-link" onClick={() => setSelectedDeal({ stage: row.original.stage, card: row.original.card })}>
             {row.original.card.name}
-          </button>
-          <button
-            type="button"
-            className="contact-preview-trigger"
-            onClick={() => setSelectedDeal({ stage: row.original.stage, card: row.original.card })}
-            aria-label={`Vista rápida de ${row.original.card.name}`}
-          >
-            <span className="toolbar-button-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span>
           </button>
         </div>
       )
