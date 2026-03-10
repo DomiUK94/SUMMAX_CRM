@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
+import { CrmIcon } from "@/components/ui/crm-icon";
 
 type InvestorOption = {
   id: string;
@@ -165,7 +166,7 @@ export function NewContactForm({
               </div>
               <Dialog.Close asChild>
                 <button type="button" className="radix-dialog-close" aria-label="Cerrar">
-                  x
+                  <CrmIcon name="close" className="crm-icon" />
                 </button>
               </Dialog.Close>
             </div>

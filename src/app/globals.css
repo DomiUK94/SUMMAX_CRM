@@ -1173,10 +1173,22 @@ button {
 }
 
 .radix-dialog-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
   min-width: 40px;
+  height: 40px;
   min-height: 40px;
   border-radius: 999px;
   padding: 0;
+  line-height: 0;
+}
+
+.radix-dialog-close .crm-icon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2.1;
 }
 
 .radix-dialog-actions {
@@ -2278,6 +2290,51 @@ button {
   gap: 8px;
 }
 
+.contact-quick-sheet-contact-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.contact-quick-sheet-contact-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid rgba(128, 157, 180, 0.24);
+  background: #ffffff;
+  color: #234764;
+  text-decoration: none;
+  box-shadow: 0 10px 18px rgba(22, 52, 77, 0.06);
+}
+
+.contact-quick-sheet-contact-button .crm-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.contact-quick-sheet-contact-button-disabled {
+  background: rgba(236, 241, 246, 0.96);
+  color: #9caabd;
+  border-color: rgba(156, 170, 189, 0.18);
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.contact-quick-sheet-phone-preview {
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
+  padding: 0 12px;
+  border-radius: 12px;
+  background: rgba(223, 236, 248, 0.92);
+  color: #173a56;
+  font-weight: 700;
+  text-decoration: none;
+}
+
 .contact-followup-verde {
   color: var(--tone-success-text);
   background: var(--tone-success-bg);
@@ -2498,6 +2555,10 @@ button[type="submit"] {
 }
 
 .contact-name-link:hover {
+  transform: none;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
   color: #0a566f;
 }
 .dashboard-table-filter-form {
@@ -3611,7 +3672,7 @@ button[type="submit"] {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: 16px;
-  padding: 0 20px 20px;
+  padding: 18px 20px 24px;
   border-bottom: 1px solid rgba(156, 174, 194, 0.22);
 }
 
@@ -3660,7 +3721,7 @@ button[type="submit"] {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 10px;
-  padding: 0 20px 20px;
+  padding: 18px 20px 20px;
   border-bottom: 1px solid rgba(156, 174, 194, 0.22);
 }
 
@@ -4261,19 +4322,32 @@ button[type="submit"] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   min-height: 40px;
   padding: 0 14px;
   border-radius: 12px;
-  border: 1px solid rgba(124, 94, 176, 0.44);
+  border: 1px solid rgba(239, 124, 54, 0.42);
   background: #ffffff;
-  color: #72519f;
+  color: #cf6a2e;
   font-weight: 800;
   text-decoration: none;
 }
 
 .company-profile-edit-button:hover {
-  border-color: rgba(124, 94, 176, 0.58);
-  color: #65458f;
+  border-color: rgba(239, 124, 54, 0.58);
+  color: #b95b24;
+  box-shadow: 0 12px 24px rgba(239, 124, 54, 0.12);
+}
+
+.company-profile-edit-button-icon-only {
+  width: 40px;
+  min-width: 40px;
+  padding: 0;
+}
+
+.company-profile-edit-button .crm-icon {
+  width: 18px;
+  height: 18px;
 }
 
 .contact-record-gear .crm-icon,

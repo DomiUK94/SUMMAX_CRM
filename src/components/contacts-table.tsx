@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -119,6 +119,12 @@ function daysWithoutAction(updatedAt: string | null): number {
   return Math.max(0, Math.floor(diff / (24 * 60 * 60 * 1000)));
 }
 
+function toTelHref(phone: string | null | undefined): string | null {
+  if (!phone) return null;
+  const normalized = phone.trim().replace(/[^+\d]/g, "");
+  return normalized ? `tel:${normalized}` : null;
+}
+
 function followUpLevel(updatedAt: string | null): "rojo" | "ambar" | "verde" {
   const days = daysWithoutAction(updatedAt);
   if (days > 14) return "rojo";
@@ -166,6 +172,7 @@ export function ContactsTable({
   const [columnVisibility, setColumnVisibility] = usePersistedState<VisibilityState>(`${prefix}:columns`, DEFAULT_COLUMNS);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [quickViewContact, setQuickViewContact] = useState<ListedContact | null>(null);
+  const [phonePreviewOpen, setPhonePreviewOpen] = useState(false);
   const [toast, setToast] = useState<{ tone: ToastTone; message: string } | null>(null);
 
   useEffect(() => {
@@ -173,6 +180,10 @@ export function ContactsTable({
     const timeout = window.setTimeout(() => setToast(null), 2800);
     return () => window.clearTimeout(timeout);
   }, [toast]);
+
+  useEffect(() => {
+    setPhonePreviewOpen(false);
+  }, [quickViewContact?.id]);
 
   function showToast(message: string, tone: ToastTone = "info") {
     setToast({ message, tone });
@@ -631,10 +642,10 @@ export function ContactsTable({
                   </Dialog.Description>
                 </div>
                 <Dialog.Close asChild>
-                  <button type="button" className="radix-dialog-close" aria-label="Cerrar">
-                    x
-                  </button>
-                </Dialog.Close>
+                    <button type="button" className="radix-dialog-close" aria-label="Cerrar">
+                      <CrmIcon name="close" className="crm-icon" />
+                    </button>
+                  </Dialog.Close>
               </div>
 
               <div className="stack" style={{ gap: 14 }}>
@@ -731,24 +742,67 @@ export function ContactsTable({
                 <div className="radix-dialog-head">
                   <div>
                     <Dialog.Title>{quickViewContact.full_name}</Dialog.Title>
-                    <Dialog.Description>{quickViewContact.investor_name ?? "Sin compañia asociada"}</Dialog.Description>
+                    <Dialog.Description>{quickViewContact.investor_name ?? "Sin compania asociada"}</Dialog.Description>
                   </div>
                   <Dialog.Close asChild>
                     <button type="button" className="radix-dialog-close" aria-label="Cerrar">
-                      x
-                    </button>
+                    <CrmIcon name="close" className="crm-icon" />
+                  </button>
                   </Dialog.Close>
                 </div>
 
+                <div className="contact-quick-sheet-panel">
+                  <p className="contact-quick-sheet-label">Como contactar</p>
+                  <div className="contact-quick-sheet-contact-row">
+                    {quickViewContact.linkedin ? (
+                      <a
+                        href={quickViewContact.linkedin}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="contact-quick-sheet-contact-button"
+                        aria-label="Abrir LinkedIn"
+                      >
+                        <CrmIcon name="linkedin" className="crm-icon" />
+                      </a>
+                    ) : (
+                      <span className="contact-quick-sheet-contact-button contact-quick-sheet-contact-button-disabled" aria-hidden="true">
+                        <CrmIcon name="linkedin" className="crm-icon" />
+                      </span>
+                    )}
+                    {toTelHref(quickViewContact.phone) ? (
+                      <button
+                        type="button"
+                        className="contact-quick-sheet-contact-button"
+                        aria-label="Previsualizar telefono"
+                        onClick={() => setPhonePreviewOpen((current) => !current)}
+                      >
+                        <CrmIcon name="phone" className="crm-icon" />
+                      </button>
+                    ) : (
+                      <span className="contact-quick-sheet-contact-button contact-quick-sheet-contact-button-disabled" aria-hidden="true">
+                        <CrmIcon name="phone" className="crm-icon" />
+                      </span>
+                    )}
+                    {quickViewContact.email ? (
+                      <a href={`mailto:${quickViewContact.email}`} className="contact-quick-sheet-contact-button" aria-label="Enviar email">
+                        <CrmIcon name="mail" className="crm-icon" />
+                      </a>
+                    ) : (
+                      <span className="contact-quick-sheet-contact-button contact-quick-sheet-contact-button-disabled" aria-hidden="true">
+                        <CrmIcon name="mail" className="crm-icon" />
+                      </span>
+                    )}
+                  </div>
+                  {phonePreviewOpen && quickViewContact.phone ? (
+                    <a href={toTelHref(quickViewContact.phone) ?? "#"} className="contact-quick-sheet-phone-preview">
+                      {quickViewContact.phone}
+                    </a>
+                  ) : (
+                    <p className="contact-quick-sheet-muted">LinkedIn, telefono y mail.</p>
+                  )}
+                </div>
+
                 <div className="contact-quick-sheet-meta">
-                  <div className="contact-quick-sheet-item">
-                    <span>Email</span>
-                    <strong>{quickViewContact.email ?? "Sin email"}</strong>
-                  </div>
-                  <div className="contact-quick-sheet-item">
-                    <span>Telefono</span>
-                    <strong>{quickViewContact.phone ?? "Sin telefono"}</strong>
-                  </div>
                   <div className="contact-quick-sheet-item">
                     <span>Propietario</span>
                     <strong>{quickViewContact.owner_email ?? "Sin propietario"}</strong>
@@ -773,22 +827,6 @@ export function ContactsTable({
                   <div className="contact-quick-sheet-panel">
                     <p className="contact-quick-sheet-label">Notas rapidas</p>
                     <p className="contact-quick-sheet-copy">{quickViewContact.comments ?? "Sin comentarios todavia."}</p>
-                  </div>
-
-                  <div className="contact-quick-sheet-panel">
-                    <p className="contact-quick-sheet-label">Canales</p>
-                    <div className="contact-quick-sheet-links">
-                      {quickViewContact.linkedin ? (
-                        <a href={quickViewContact.linkedin} target="_blank" rel="noreferrer" className="quick-pill quick-pill-ghost">
-                          LinkedIn
-                        </a>
-                      ) : null}
-                      {quickViewContact.email ? (
-                        <a href={`mailto:${quickViewContact.email}`} className="quick-pill quick-pill-ghost">
-                          Email
-                        </a>
-                      ) : null}
-                    </div>
                   </div>
                 </div>
 

@@ -1,4 +1,4 @@
-﻿import type { SVGProps } from "react";
+import type { SVGProps } from "react";
 
 type CrmIconName =
   | "dashboard"
@@ -28,6 +28,8 @@ type CrmIconName =
   | "back"
   | "settings"
   | "chevron_down"
+  | "close"
+  | "web"
   | "linkedin";
 
 export function CrmIcon({ name, className, ...props }: { name: CrmIconName } & SVGProps<SVGSVGElement>) {
@@ -75,9 +77,9 @@ export function CrmIcon({ name, className, ...props }: { name: CrmIconName } & S
     case "plus":
       return <svg {...common}><path d="M12 5v14" /><path d="M5 12h14" /></svg>;
     case "edit":
-      return <svg {...common}><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 1 1 3 3L7 19l-4 1 1-4Z" /></svg>;
+      return <svg {...common}><path d="m14.7 5.3 4 4" /><path d="M4 20h4.8l10-10a2.8 2.8 0 1 0-4-4l-10 10Z" /><path d="M4 15.2V20" /></svg>;
     case "edit_record":
-      return <svg {...common}><path d="M7 3h8l4 4v10" /><path d="M15 3v5h5" /><path d="M10 13h4" /><path d="M10 17h3" /><path d="M14.5 15.5 18 19" /><path d="m13 20 1.1-3.4 4.5-4.5a1.5 1.5 0 1 1 2.1 2.1l-4.5 4.5Z" /></svg>;
+      return <svg {...common}><path d="m14.7 5.3 4 4" /><path d="M4 20h4.8l10-10a2.8 2.8 0 1 0-4-4l-10 10Z" /><path d="M4 15.2V20" /></svg>;
     case "warning":
       return <svg {...common}><path d="M12 9v4" /><path d="M12 17h.01" /><path d="M10.3 3.8 2.8 17a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0Z" /></svg>;
     case "spark":
@@ -98,6 +100,10 @@ export function CrmIcon({ name, className, ...props }: { name: CrmIconName } & S
       return <svg {...common}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.2a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.2a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.2a1.7 1.7 0 0 0 1 1.5h.1a1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.2a1.7 1.7 0 0 0-1.5 1Z" /></svg>;
     case "chevron_down":
       return <svg {...common}><path d="m6 9 6 6 6-6" /></svg>;
+    case "close":
+      return <svg {...common}><path d="m7 7 10 10" /><path d="m17 7-10 10" /></svg>;
+    case "web":
+      return <svg {...common}><circle cx="12" cy="12" r="8" /><path d="M4 12h16" /><path d="M12 4a13 13 0 0 1 0 16" /><path d="M12 4a13 13 0 0 0 0 16" /></svg>;
     case "linkedin":
       return <svg {...common}><path d="M8 11v5" /><path d="M8 8h.01" /><path d="M12 16v-3a2 2 0 0 1 4 0v3" /><path d="M12 11v5" /><rect x="4" y="4" width="16" height="16" rx="2" /></svg>;
     default:

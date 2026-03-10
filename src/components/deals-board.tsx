@@ -561,7 +561,7 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
                     <Dialog.Description>{selectedDeal.stage}</Dialog.Description>
                   </div>
                   <Dialog.Close asChild>
-                    <button type="button" className="radix-dialog-close" aria-label="Cerrar">×</button>
+                    <button type="button" className="radix-dialog-close" aria-label="Cerrar"><CrmIcon name="close" className="crm-icon" /></button>
                   </Dialog.Close>
                 </div>
 

@@ -1,10 +1,11 @@
-﻿"use client";
+"use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { CrmIcon } from "@/components/ui/crm-icon";
 
 type Props = {
   action: (formData: FormData) => void | Promise<void>;
+  iconOnly?: boolean;
   defaults: {
     name: string;
     category: string;
@@ -24,11 +25,14 @@ type Props = {
   };
 };
 
-export function CompanyProfileEditDialog({ action, defaults }: Props) {
+export function CompanyProfileEditDialog({ action, defaults, iconOnly = false }: Props) {
   return (
     <Dialog.Root>
       <Dialog.Trigger asChild>
-        <button type="button" className="company-profile-edit-button"><CrmIcon name="edit_record" className="crm-icon" /><span>Modificar datos</span></button>
+        <button type="button" className={`company-profile-edit-button${iconOnly ? " company-profile-edit-button-icon-only" : ""}`}>
+          <CrmIcon name="edit_record" className="crm-icon" />
+          {iconOnly ? null : <span>Modificar datos</span>}
+        </button>
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="radix-dialog-overlay" />
@@ -36,10 +40,12 @@ export function CompanyProfileEditDialog({ action, defaults }: Props) {
           <div className="radix-dialog-head">
             <div>
               <Dialog.Title>Modificar datos</Dialog.Title>
-              <Dialog.Description>Actualiza los datos principales de la compañia sin salir de la ficha.</Dialog.Description>
+              <Dialog.Description>{"Actualiza los datos principales de la compa\u00f1\u00eda sin salir de la ficha."}</Dialog.Description>
             </div>
-            <Dialog.Close asChild>
-              <button type="button" className="radix-dialog-close" aria-label="Cerrar">×</button>
+                        <Dialog.Close asChild>
+              <button type="button" className="radix-dialog-close" aria-label="Cerrar">
+                <CrmIcon name="close" className="crm-icon" />
+              </button>
             </Dialog.Close>
           </div>
 
@@ -69,19 +75,19 @@ export function CompanyProfileEditDialog({ action, defaults }: Props) {
               <input name="office" defaultValue={defaults.office} />
             </label>
             <label className="form-field">
-              <span>Tamaño</span>
+              <span>{"Tama\u00f1o"}</span>
               <input name="company_size" defaultValue={defaults.company_size} />
             </label>
             <label className="form-field">
-              <span>Inv. mínima</span>
+              <span>{"Inv. m\u00ednima"}</span>
               <input name="min_investment" defaultValue={defaults.min_investment} />
             </label>
             <label className="form-field">
-              <span>Inv. máxima</span>
+              <span>{"Inv. m\u00e1xima"}</span>
               <input name="max_investment" defaultValue={defaults.max_investment} />
             </label>
             <label className="form-field company-detail-field-span-2">
-              <span>Dirección</span>
+              <span>{"Direcci\u00f3n"}</span>
               <input name="address" defaultValue={defaults.address} />
             </label>
             <label className="form-field">
@@ -116,3 +122,4 @@ export function CompanyProfileEditDialog({ action, defaults }: Props) {
     </Dialog.Root>
   );
 }
+

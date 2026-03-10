@@ -114,7 +114,6 @@ export async function AppShell({
       items: [
         { href: "/imports", label: "Importaciones", icon: "imports", visible: isAdmin },
         { href: "/exports", label: "Exportaciones", icon: "exports", visible: isAdmin },
-        { href: "/changelog", label: "ChangeLog", icon: "changelog" },
         { href: "/sugerencias", label: "Sugerencias y bugs", icon: "feedback" },
         { href: "/usuarios", label: "Usuarios", icon: "users", visible: isAdmin || isManager },
         { href: "/mi-cuenta", label: "Mi cuenta", icon: "account" }

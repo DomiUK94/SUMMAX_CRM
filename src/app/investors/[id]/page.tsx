@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { CrmIcon } from "@/components/ui/crm-icon";
 import { CompanyDetailCenter } from "@/components/company-detail-center";
+import { CompanyProfileEditDialog } from "@/components/company-profile-edit-dialog";
 import { CompanyNotesDialog } from "@/components/company-notes-dialog";
 import { requireUser } from "@/lib/auth/session";
 import { addEntityNote, getInvestorById, updateInvestorProfile } from "@/lib/db/crm";
@@ -167,8 +168,8 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
   const quickActions = [
     { label: "Correo", icon: "mail" as const, href: primaryContact?.email ? `mailto:${primaryContact.email}` : undefined },
     { label: "LinkedIn", icon: "linkedin" as const, href: investor.linkedin ? investor.linkedin : undefined, external: Boolean(investor.linkedin) },
-    { label: "Tarea", icon: "task" as const, href: `/actividades/new?investor_id=${encodeURIComponent(params.id)}` },
-    { label: "M\u00e1s", icon: "more" as const, href: investor.website ? investor.website : undefined, external: Boolean(investor.website) }
+    { label: "Web", icon: "web" as const, href: investor.website ? investor.website : undefined, external: Boolean(investor.website) },
+    { label: "Tarea", icon: "task" as const, href: `/actividades/new?investor_id=${encodeURIComponent(params.id)}` }
   ];
 
   return (
@@ -187,14 +188,6 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
               <div className="company-record-avatar">{initials || "CO"}</div>
               <div className="company-record-copy">
                 <h2>{investor.name}</h2>
-                <div className="company-record-links">
-                  {investor.website ? (
-                    <a href={investor.website} target="_blank" rel="noreferrer">{investor.website}</a>
-                  ) : (
-                    <span>Sin web</span>
-                  )}
-                  {investor.linkedin ? <a href={investor.linkedin} target="_blank" rel="noreferrer">LinkedIn</a> : null}
-                </div>
               </div>
             </div>
 
@@ -230,10 +223,7 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
                 <h3>Información clave</h3>
               </div>
               <div className="row" style={{ gap: 10, alignItems: "center" }}>
-                <button type="button" className="company-record-top-action">
-                  <span>Acciones</span>
-                  <CrmIcon name="chevron_down" className="crm-icon" />
-                </button>
+                <CompanyProfileEditDialog action={updateInvestorAction} defaults={defaults} iconOnly />
               </div>
             </div>
 
@@ -315,6 +305,8 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
     </AppShell>
   );
 }
+
+
 
 
 

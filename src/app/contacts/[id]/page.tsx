@@ -136,7 +136,6 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
     { label: "Correo", icon: "mail" as const, href: contact.email ? `mailto:${contact.email}` : undefined },
     { label: "LinkedIn", icon: "linkedin" as const, href: contact.linkedin ? contact.linkedin : undefined },
     { label: "Tarea", icon: "task" as const, href: `/actividades/new?contact_id=${encodeURIComponent(params.id)}${contact.investor_id ? `&investor_id=${encodeURIComponent(contact.investor_id)}` : ""}` },
-    { label: "Reuni\u00f3n", icon: "meeting" as const, href: `/actividades/new?contact_id=${encodeURIComponent(params.id)}${contact.investor_id ? `&investor_id=${encodeURIComponent(contact.investor_id)}` : ""}` },
     { label: "M\u00e1s", icon: "more" as const, href: contact.investor_id ? `/investors/${encodeURIComponent(contact.investor_id)}` : undefined }
   ];
 
@@ -184,7 +183,6 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
                 <p>{contact.role ?? "Sin rol definido"}</p>
                 <div className="contact-record-links">
                   <span>{contact.email ?? "Sin email"}</span>
-                  {contact.linkedin ? <a href={contact.linkedin} target="_blank" rel="noreferrer">LinkedIn</a> : null}
                 </div>
               </div>
             </div>
@@ -213,7 +211,7 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
                 <h3>{"Informaci\u00f3n clave"}</h3>
               </div>
               <div className="row" style={{ gap: 10, alignItems: "center" }}>
-                <ContactProfileEditDialog action={updateContactAction} defaults={contactDefaults} />
+                <ContactProfileEditDialog action={updateContactAction} defaults={contactDefaults} iconOnly />
               </div>
             </div>
 

@@ -4,6 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { CrmIcon } from "@/components/ui/crm-icon";
 
 type Props = {
+  iconOnly?: boolean;
   action: (formData: FormData) => void | Promise<void>;
   defaults: {
     full_name: string;
@@ -17,13 +18,13 @@ type Props = {
   };
 };
 
-export function ContactProfileEditDialog({ action, defaults }: Props) {
+export function ContactProfileEditDialog({ action, defaults, iconOnly = false }: Props) {
   return (
     <Dialog.Root>
       <Dialog.Trigger asChild>
-        <button type="button" className="company-profile-edit-button">
+        <button type="button" className={`company-profile-edit-button${iconOnly ? " company-profile-edit-button-icon-only" : ""}`}>
           <CrmIcon name="edit_record" className="crm-icon" />
-          <span>Modificar datos</span>
+          {iconOnly ? null : <span>Modificar datos</span>}
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>
@@ -34,8 +35,10 @@ export function ContactProfileEditDialog({ action, defaults }: Props) {
               <Dialog.Title>Modificar datos</Dialog.Title>
               <Dialog.Description>Actualiza los datos principales del contacto sin salir de la ficha.</Dialog.Description>
             </div>
-            <Dialog.Close asChild>
-              <button type="button" className="radix-dialog-close" aria-label="Cerrar">?</button>
+                        <Dialog.Close asChild>
+              <button type="button" className="radix-dialog-close" aria-label="Cerrar">
+                <CrmIcon name="close" className="crm-icon" />
+              </button>
             </Dialog.Close>
           </div>
 

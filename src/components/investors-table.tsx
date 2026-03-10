@@ -366,7 +366,7 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
                     <Dialog.Description>{selected.category ?? "Sin categoría asignada"}</Dialog.Description>
                   </div>
                   <Dialog.Close asChild>
-                    <button type="button" className="radix-dialog-close" aria-label="Cerrar">×</button>
+                    <button type="button" className="radix-dialog-close" aria-label="Cerrar"><CrmIcon name="close" className="crm-icon" /></button>
                   </Dialog.Close>
                 </div>
 

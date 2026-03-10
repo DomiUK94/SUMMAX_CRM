@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { CrmIcon } from "@/components/ui/crm-icon";
@@ -32,8 +32,10 @@ export function CompanyNotesDialog({ notes, action }: Props) {
               <Dialog.Title>Notas</Dialog.Title>
               <Dialog.Description>Añade tantas notas como necesites para esta compañia.</Dialog.Description>
             </div>
-            <Dialog.Close asChild>
-              <button type="button" className="radix-dialog-close" aria-label="Cerrar">×</button>
+                        <Dialog.Close asChild>
+              <button type="button" className="radix-dialog-close" aria-label="Cerrar">
+                <CrmIcon name="close" className="crm-icon" />
+              </button>
             </Dialog.Close>
           </div>
 

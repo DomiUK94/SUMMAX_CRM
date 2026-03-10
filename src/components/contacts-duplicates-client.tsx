@@ -1,9 +1,10 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { getCoreRowModel, type ColumnDef, useReactTable } from "@tanstack/react-table";
 import { DataTable } from "@/components/ui/data-table";
+import { CrmIcon } from "@/components/ui/crm-icon";
 
 type DuplicateRecord = {
   contact_id: number;
@@ -151,7 +152,7 @@ export function ContactsDuplicatesClient() {
               </div>
               <Dialog.Close asChild>
                 <button type="button" className="radix-dialog-close" aria-label="Cerrar">
-                  ×
+                  <CrmIcon name="close" className="crm-icon" />
                 </button>
               </Dialog.Close>
             </div>
