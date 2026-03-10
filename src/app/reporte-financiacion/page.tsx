@@ -37,11 +37,11 @@ export default async function ReporteFinanciacionPage() {
   const totalEstimated = rows.reduce((acc, r) => acc + r.estimated_num, 0);
 
   return (
-    <AppShell title="Reporte financiación" subtitle="Resumen económico de negocios por cuenta" canViewGlobal={user.can_view_global_dashboard}>
+    <AppShell title="Reporte financiación" subtitle="Resumen económico de negocios por compañia" canViewGlobal={user.can_view_global_dashboard}>
       <div className="stats-grid">
         <div className="card">
           <strong>{rows.length}</strong>
-          <div className="muted">Cuentas analizadas</div>
+          <div className="muted">Compañias analizadas</div>
         </div>
         <div className="card">
           <strong>{totalEstimated.toLocaleString("es-ES", { maximumFractionDigits: 0 })}</strong>
@@ -51,7 +51,7 @@ export default async function ReporteFinanciacionPage() {
 
       <div className="card">
         <StaticTable
-          columns={["Company ID", "Cuenta", "Vertical", "Prioridad", "Inversión mínima", "Inversión máxima", "Monto estimado"]}
+          columns={["Company ID", "Compañia", "Vertical", "Prioridad", "Inversión mínima", "Inversión máxima", "Monto estimado"]}
           rows={rows.map((r) => [
             String(r.company_id),
             r.compania,
@@ -67,4 +67,6 @@ export default async function ReporteFinanciacionPage() {
     </AppShell>
   );
 }
+
+
 

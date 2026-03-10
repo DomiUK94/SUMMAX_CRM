@@ -1,5 +1,5 @@
-import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 import { writeAuditEntry } from "@/lib/db/audit";
+import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 import { normalizeEmail, normalizeOptionalText, normalizePhone, requireText } from "@/lib/validation/crm";
 
 export type InvestorInput = {
@@ -9,6 +9,17 @@ export type InvestorInput = {
   strategy?: string;
   sector?: string;
   status_name?: string;
+  address?: string;
+  linkedin?: string;
+  portfolio?: string;
+  comments?: string;
+  fit?: string;
+  reason?: string;
+  min_investment?: string;
+  max_investment?: string;
+  priority?: string;
+  office?: string;
+  company_size?: string;
   actor_user_id?: string;
   actor_email?: string;
 };
@@ -163,7 +174,7 @@ export async function listContactsPage(params: {
     .select(
       "contact_id, persona_contacto, email, telefono, rol, otro_contacto, linkedin, comentarios, compania, prioritario, owner_user_id, owner_email, updated_at",
       {
-      count: "exact"
+        count: "exact"
       }
     );
 
@@ -272,6 +283,17 @@ export async function createInvestor(input: InvestorInput) {
   const safeCategory = normalizeOptionalText(input.category, 120) ?? "Sin categoria";
   const safeWebsite = normalizeOptionalText(input.website, 250);
   const safeStrategy = normalizeOptionalText(input.strategy, 250);
+  const safeAddress = normalizeOptionalText(input.address, 250);
+  const safeLinkedin = normalizeOptionalText(input.linkedin, 250);
+  const safePortfolio = normalizeOptionalText(input.portfolio, 250);
+  const safeComments = normalizeOptionalText(input.comments, 1000);
+  const safeFit = normalizeOptionalText(input.fit, 250);
+  const safeReason = normalizeOptionalText(input.reason, 500);
+  const safeMinInvestment = normalizeOptionalText(input.min_investment, 120);
+  const safeMaxInvestment = normalizeOptionalText(input.max_investment, 120);
+  const safePriority = normalizeOptionalText(input.priority, 120);
+  const safeOffice = normalizeOptionalText(input.office, 160);
+  const safeCompanySize = normalizeOptionalText(input.company_size, 120);
 
   const nextCompanyId = Date.now();
   const { data, error } = await supabase
@@ -281,7 +303,18 @@ export async function createInvestor(input: InvestorInput) {
       compania: safeName,
       vertical: safeCategory,
       web: safeWebsite,
-      estrategia: safeStrategy
+      estrategia: safeStrategy,
+      direccion: safeAddress,
+      linkedin: safeLinkedin,
+      portfolio: safePortfolio,
+      comentarios: safeComments,
+      encaje_summax: safeFit,
+      motivo: safeReason,
+      inversion_minima: safeMinInvestment,
+      inversion_maxima: safeMaxInvestment,
+      prioridad: safePriority,
+      sede: safeOffice,
+      tamano_empresa: safeCompanySize
     })
     .select("company_id")
     .single();
@@ -300,6 +333,62 @@ export async function createInvestor(input: InvestorInput) {
   return { id: String(data.company_id) };
 }
 
+export async function updateInvestorProfile(input: {
+  investor_id: string;
+  name: string;
+  category?: string;
+  website?: string;
+  strategy?: string;
+  address?: string;
+  linkedin?: string;
+  portfolio?: string;
+  comments?: string;
+  fit?: string;
+  reason?: string;
+  min_investment?: string;
+  max_investment?: string;
+  priority?: string;
+  office?: string;
+  company_size?: string;
+  actor_user_id: string;
+  actor_email: string;
+}) {
+  const supabase = createSourceCrmServerClient();
+  const safeName = requireText(input.name, "Nombre de compa?ia", 150);
+  const payload = {
+    compania: safeName,
+    vertical: normalizeOptionalText(input.category, 120),
+    web: normalizeOptionalText(input.website, 250),
+    estrategia: normalizeOptionalText(input.strategy, 250),
+    direccion: normalizeOptionalText(input.address, 250),
+    linkedin: normalizeOptionalText(input.linkedin, 250),
+    portfolio: normalizeOptionalText(input.portfolio, 250),
+    comentarios: normalizeOptionalText(input.comments, 1000),
+    encaje_summax: normalizeOptionalText(input.fit, 250),
+    motivo: normalizeOptionalText(input.reason, 500),
+    inversion_minima: normalizeOptionalText(input.min_investment, 120),
+    inversion_maxima: normalizeOptionalText(input.max_investment, 120),
+    prioridad: normalizeOptionalText(input.priority, 120),
+    sede: normalizeOptionalText(input.office, 160),
+    tamano_empresa: normalizeOptionalText(input.company_size, 120),
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabase.from("inversion").update(payload).eq("company_id", Number(input.investor_id));
+  if (error) throw error;
+
+  await writeAuditEntry({
+    entityType: "investor",
+    entityId: input.investor_id,
+    action: "update",
+    changedByUserId: input.actor_user_id,
+    changedByEmail: input.actor_email,
+    field: "profile",
+    newValue: safeName,
+    metadata: payload
+  });
+}
+
 export async function createContact(input: ContactInput) {
   const supabase = createSourceCrmServerClient();
   const safeFullName = requireText(input.full_name, "Nombre del contacto", 150);
@@ -315,15 +404,14 @@ export async function createContact(input: ContactInput) {
     .from("inversion")
     .select("compania")
     .eq("company_id", Number(input.investor_id))
-    .single();
+    .maybeSingle();
 
-  const nextContactId = Date.now();
   const { data, error } = await supabase
     .from("contactos")
     .insert({
-      contact_id: nextContactId,
+      contact_id: Date.now(),
       company_id: Number(input.investor_id),
-      compania: inversion?.compania ?? "",
+      compania: inversion?.compania ?? null,
       persona_contacto: safeFullName,
       email: safeEmail,
       telefono: safePhone,
@@ -352,6 +440,9 @@ export async function createContact(input: ContactInput) {
   return { id: String(data.contact_id) };
 }
 
+
+
+
 export async function getInvestorById(id: string) {
   const supabase = createSourceCrmServerClient();
   const [inv, contacts, sectores, tipos, mapas] = await Promise.all([
@@ -370,6 +461,18 @@ export async function getInvestorById(id: string) {
         status_name: null,
         website: inv.data.web,
         strategy: inv.data.estrategia,
+        address: inv.data.direccion ?? null,
+        linkedin: inv.data.linkedin ?? null,
+        portfolio: inv.data.portfolio ?? null,
+        comments: inv.data.comentarios ?? null,
+        fit: inv.data.encaje_summax ?? null,
+        reason: inv.data.motivo ?? null,
+        min_investment: inv.data.inversion_minima ?? null,
+        max_investment: inv.data.inversion_maxima ?? null,
+        priority: inv.data.prioridad ?? null,
+        office: inv.data.sede ?? null,
+        company_size: inv.data.tamano_empresa ?? null,
+        updated_at: inv.data.updated_at ?? null,
         sector: (sectores.data ?? []).map((s) => s.sector_consolidado ?? s.sector).filter(Boolean).join(", "),
         tipo_fondo: (tipos.data ?? []).map((t) => t.tipo_fondo).join(", "),
         mercados: (mapas.data ?? []).map((m) => m.area_geografica).join(", ")
@@ -387,7 +490,7 @@ export async function getInvestorById(id: string) {
     inv.data?.comentarios
       ? [
           {
-            id: `inv-${inv.data.company_id}`,
+            id: "inv-" + String(inv.data.company_id),
             body: inv.data.comentarios,
             created_at: inv.data.updated_at,
             created_by_email: "sourcecrm"
@@ -414,6 +517,13 @@ export async function getContactById(id: string) {
         investor_name: data.compania,
         email: data.email,
         phone: data.telefono,
+        role: data.rol ?? null,
+        other_contact: data.otro_contacto ?? null,
+        linkedin: data.linkedin ?? null,
+        comments: data.comentarios ?? null,
+        owner_user_id: data.owner_user_id ?? null,
+        owner_email: data.owner_email ?? null,
+        updated_at: data.updated_at ?? null,
         status_name: data.prioritario
       }
     : null;
@@ -422,7 +532,7 @@ export async function getContactById(id: string) {
     data?.comentarios
       ? [
           {
-            id: `con-${data.contact_id}`,
+            id: "con-" + String(data.contact_id),
             body: data.comentarios,
             created_at: data.updated_at,
             created_by_email: "sourcecrm"
@@ -436,6 +546,37 @@ export async function getContactById(id: string) {
   };
 }
 
+export async function addEntityNote(params: {
+  entity_type: "investor" | "contact";
+  entity_id: string;
+  body: string;
+  created_by_user_id: string;
+  created_by_email: string;
+}) {
+  const supabase = createSourceCrmServerClient();
+  const safeBody = requireText(params.body, "Nota", 4000);
+
+  const { error } = await supabase.from("entity_notes").insert({
+    entity_type: params.entity_type,
+    entity_id: params.entity_id,
+    body: safeBody,
+    created_by_user_id: params.created_by_user_id,
+    created_by_email: params.created_by_email
+  });
+
+  if (error) throw error;
+
+  await writeAuditEntry({
+    entityType: params.entity_type,
+    entityId: params.entity_id,
+    action: "update",
+    changedByUserId: params.created_by_user_id,
+    changedByEmail: params.created_by_email,
+    field: "nota",
+    newValue: safeBody
+  });
+}
+
 export async function addComment(params: {
   entity_type: "investor" | "contact";
   entity_id: string;
@@ -447,7 +588,10 @@ export async function addComment(params: {
   if (params.entity_type === "investor") {
     const { data } = await supabase.from("inversion").select("comentarios").eq("company_id", Number(params.entity_id)).single();
     const nextValue = [data?.comentarios ?? "", params.body].filter(Boolean).join(" | ");
-    const { error } = await supabase.from("inversion").update({ comentarios: nextValue, updated_at: new Date().toISOString() }).eq("company_id", Number(params.entity_id));
+    const { error } = await supabase
+      .from("inversion")
+      .update({ comentarios: nextValue, updated_at: new Date().toISOString() })
+      .eq("company_id", Number(params.entity_id));
     if (error) throw error;
     await writeAuditEntry({
       entityType: "investor",
@@ -463,7 +607,10 @@ export async function addComment(params: {
 
   const { data } = await supabase.from("contactos").select("comentarios").eq("contact_id", Number(params.entity_id)).single();
   const nextValue = [data?.comentarios ?? "", params.body].filter(Boolean).join(" | ");
-  const { error } = await supabase.from("contactos").update({ comentarios: nextValue, updated_at: new Date().toISOString() }).eq("contact_id", Number(params.entity_id));
+  const { error } = await supabase
+    .from("contactos")
+    .update({ comentarios: nextValue, updated_at: new Date().toISOString() })
+    .eq("contact_id", Number(params.entity_id));
   if (error) throw error;
   await writeAuditEntry({
     entityType: "contact",
@@ -473,6 +620,84 @@ export async function addComment(params: {
     changedByEmail: params.created_by_email,
     field: "comentarios",
     newValue: params.body
+  });
+}
+
+export async function updateContactProfile(input: {
+  contact_id: string;
+  full_name: string;
+  email?: string;
+  phone?: string;
+  role?: string;
+  other_contact?: string;
+  linkedin?: string;
+  comments?: string;
+  status_name?: string;
+  actor_user_id: string;
+  actor_email: string;
+}) {
+  const supabase = createSourceCrmServerClient();
+  const safeFullName = requireText(input.full_name, "Nombre del contacto", 150);
+  const payload = {
+    persona_contacto: safeFullName,
+    email: normalizeEmail(input.email),
+    telefono: normalizePhone(input.phone),
+    rol: normalizeOptionalText(input.role, 120),
+    otro_contacto: normalizeOptionalText(input.other_contact, 120),
+    linkedin: normalizeOptionalText(input.linkedin, 250),
+    comentarios: normalizeOptionalText(input.comments, 1000),
+    prioritario: normalizeOptionalText(input.status_name, 120),
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabase.from("contactos").update(payload).eq("contact_id", Number(input.contact_id));
+  if (error) throw error;
+
+  await writeAuditEntry({
+    entityType: "contact",
+    entityId: input.contact_id,
+    action: "update",
+    changedByUserId: input.actor_user_id,
+    changedByEmail: input.actor_email,
+    field: "profile",
+    newValue: safeFullName,
+    metadata: payload
+  });
+}
+
+export async function attachContactToInvestor(params: {
+  contact_id: string;
+  investor_id: string;
+  actor_user_id: string;
+  actor_email: string;
+}) {
+  const supabase = createSourceCrmServerClient();
+  const { data: investor, error: investorError } = await supabase
+    .from("inversion")
+    .select("company_id, compania")
+    .eq("company_id", Number(params.investor_id))
+    .single();
+
+  if (investorError) throw investorError;
+
+  const payload = {
+    company_id: investor.company_id,
+    compania: investor.compania,
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabase.from("contactos").update(payload).eq("contact_id", Number(params.contact_id));
+  if (error) throw error;
+
+  await writeAuditEntry({
+    entityType: "contact",
+    entityId: params.contact_id,
+    action: "update",
+    changedByUserId: params.actor_user_id,
+    changedByEmail: params.actor_email,
+    field: "company_id",
+    newValue: String(investor.company_id),
+    metadata: payload
   });
 }
 
@@ -486,9 +711,9 @@ export async function changeContactStatus(params: {
 }) {
   const supabase = createSourceCrmServerClient();
   const { data: current } = await supabase.from("contactos").select("comentarios").eq("contact_id", Number(params.contact_id)).single();
-  const nextActionPart = ` next_action=${params.follow_up_date}`;
-  const notePart = params.note ? ` [${params.note}]` : "";
-  const statusComment = `status=${params.to_status_name}${nextActionPart}${notePart}`;
+  const nextActionPart = " next_action=" + params.follow_up_date;
+  const notePart = params.note ? " [" + params.note + "]" : "";
+  const statusComment = "status=" + params.to_status_name + nextActionPart + notePart;
   const nextComments = [current?.comentarios ?? "", statusComment].filter(Boolean).join(" | ");
 
   const { error } = await supabase
@@ -511,3 +736,6 @@ export async function changeContactStatus(params: {
     metadata: { follow_up_date: params.follow_up_date, note: params.note ?? null }
   });
 }
+
+
+

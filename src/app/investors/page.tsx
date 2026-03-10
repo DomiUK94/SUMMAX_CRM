@@ -1,4 +1,4 @@
-﻿import { AppShell } from "@/components/app-shell";
+import { AppShell } from "@/components/app-shell";
 import { InvestorsTable } from "@/components/investors-table";
 import { RowsPerPageSelect } from "@/components/rows-per-page-select";
 import { requireUser } from "@/lib/auth/session";
@@ -47,11 +47,11 @@ export default async function InvestorsPage({
   const hasNext = currentPage < totalPages;
 
   return (
-    <AppShell title="Cuentas" subtitle="Vista CRM" canViewGlobal={user.can_view_global_dashboard}>
+    <AppShell title="Compañia" subtitle="Vista CRM" canViewGlobal={user.can_view_global_dashboard}>
       <div className="companies-shell">
         <div className="companies-top-tabs">
           <button className="companies-tab companies-tab-active">
-            <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="companies" className="crm-icon" /></span><span>Todas las cuentas</span> <span className="companies-badge">{totalCount}</span>
+            <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="companies" className="crm-icon" /></span><span>Toda la compañia</span> <span className="companies-badge">{totalCount}</span>
           </button>
         </div>
         <div className="companies-toolbar card">
@@ -80,4 +80,5 @@ export default async function InvestorsPage({
     </AppShell>
   );
 }
+
 

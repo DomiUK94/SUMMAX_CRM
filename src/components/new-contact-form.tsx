@@ -42,7 +42,7 @@ export function NewContactForm({
   function handleCreateDraftInvestor() {
     const cleanName = draftName.trim();
     if (!cleanName) {
-      setDraftError("Escribe el nombre de la cuenta.");
+      setDraftError("Escribe el nombre de la compañia.");
       return;
     }
 
@@ -61,21 +61,20 @@ export function NewContactForm({
     <form action={createContactAction} className="contact-new-form card">
       <div className="contact-new-account-row">
         <label className="form-field contact-new-account-select">
-          <span>Cuenta existente</span>
+          <span>Compañia existente</span>
           <select name="investor_id" value={selectedInvestorId} onChange={(event) => handleInvestorChange(event.target.value)} required>
-            <option value="">Selecciona una cuenta</option>
+            <option value="">Selecciona una compañia</option>
             {investorOptions.map((inv) => (
               <option key={inv.id} value={inv.id}>
-                {inv.id === "__draft_new__" ? `Nueva cuenta: ${inv.name}` : inv.name}
+                {inv.id === "__draft_new__" ? `Nueva compañia: ${inv.name}` : inv.name}
               </option>
             ))}
           </select>
         </label>
 
         <div className="contact-new-account-action">
-          <span className="form-field-label">Nueva cuenta</span>
           <button type="button" className="contact-new-account-button" onClick={() => setDialogOpen(true)}>
-            Nueva cuenta
+            Nueva compañia
           </button>
         </div>
       </div>
@@ -99,7 +98,7 @@ export function NewContactForm({
 
       {draftInvestor ? (
         <div className="contact-new-created-account">
-          <strong>Cuenta preparada:</strong> {draftInvestor.name}
+          <strong>Compañia preparada:</strong> {draftInvestor.name}
           {draftInvestor.website ? <span> | {draftInvestor.website}</span> : null}
         </div>
       ) : null}
@@ -161,8 +160,8 @@ export function NewContactForm({
           <Dialog.Content className="radix-dialog-content">
             <div className="radix-dialog-head">
               <div>
-                <Dialog.Title>Nueva cuenta</Dialog.Title>
-                <Dialog.Description>Completa solo lo necesario y la cuenta quedara ya seleccionada en el formulario.</Dialog.Description>
+                <Dialog.Title>Nueva compañia</Dialog.Title>
+                <Dialog.Description>Completa solo lo necesario y la compañia quedara ya seleccionada en el formulario.</Dialog.Description>
               </div>
               <Dialog.Close asChild>
                 <button type="button" className="radix-dialog-close" aria-label="Cerrar">
@@ -173,8 +172,8 @@ export function NewContactForm({
 
             <div className="editor-stack">
               <label className="form-field">
-                <span>Nombre de la cuenta</span>
-                <input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="Nombre de la compania" />
+                <span>Nombre de la compa\u00f1ia</span>
+                <input value={draftName} onChange={(event) => setDraftName(event.target.value)} placeholder="Nombre de la compa\u00f1ia" />
               </label>
               <label className="form-field">
                 <span>Web</span>
@@ -187,7 +186,7 @@ export function NewContactForm({
               <Dialog.Close asChild>
                 <button type="button" className="quick-pill quick-pill-ghost">Cancelar</button>
               </Dialog.Close>
-              <button type="button" onClick={handleCreateDraftInvestor}>Crear cuenta</button>
+              <button type="button" onClick={handleCreateDraftInvestor}>Crear compañia</button>
             </div>
           </Dialog.Content>
         </Dialog.Portal>
@@ -195,4 +194,7 @@ export function NewContactForm({
     </form>
   );
 }
+
+
+
 

@@ -42,7 +42,7 @@ export default async function SearchPage({ searchParams }: SearchProps) {
       : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }];
 
   return (
-    <AppShell title="Busqueda global" subtitle="Contactos, Cuentas, Negocios y Actividades" canViewGlobal={user.can_view_global_dashboard}>
+    <AppShell title="Busqueda global" subtitle="Contactos, Compañia, Negocios y Actividades" canViewGlobal={user.can_view_global_dashboard}>
       <div className="stack">
         <div className="card">
           <form method="get" className="entity-toolbar">
@@ -64,7 +64,7 @@ export default async function SearchPage({ searchParams }: SearchProps) {
         </div>
 
         <div className="card">
-          <h3>Cuentas ({investorsRes.data?.length ?? 0})</h3>
+          <h3>Compañia ({investorsRes.data?.length ?? 0})</h3>
           <div className="stack">
             {(investorsRes.data ?? []).map((inv) => (
               <Link key={inv.company_id} href={`/investors/${inv.company_id}`}>
@@ -103,3 +103,4 @@ export default async function SearchPage({ searchParams }: SearchProps) {
     </AppShell>
   );
 }
+

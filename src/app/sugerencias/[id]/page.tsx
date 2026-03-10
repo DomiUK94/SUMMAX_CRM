@@ -120,13 +120,7 @@ export default async function SugerenciaDetailPage({ params, searchParams }: Par
       redirect(`/sugerencias/${suggestionId}?error=reopen_requires_note`);
     }
 
-    await source
-      .from("suggestions")
-      .update({
-        status: nextStatusRaw,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", suggestionId);
+    await source.from("suggestions").update({ status: nextStatusRaw, updated_at: new Date().toISOString() }).eq("id", suggestionId);
 
     await source.from("suggestion_events").insert({
       suggestion_id: suggestionId,
@@ -160,11 +154,7 @@ export default async function SugerenciaDetailPage({ params, searchParams }: Par
 
     await source
       .from("suggestions")
-      .update({
-        assigned_to_user_id: assignedToUserId,
-        assigned_to_email: assignedToEmail,
-        updated_at: new Date().toISOString()
-      })
+      .update({ assigned_to_user_id: assignedToUserId, assigned_to_email: assignedToEmail, updated_at: new Date().toISOString() })
       .eq("id", suggestionId);
 
     await source.from("suggestion_events").insert({
@@ -222,155 +212,122 @@ export default async function SugerenciaDetailPage({ params, searchParams }: Par
     ? nameById.get(suggestion.assigned_to_user_id) ?? suggestion.assigned_to_email ?? "Sin responsable"
     : "Sin responsable";
   const messageCount = events.filter((event) => event.event_type === "nota").length;
+  const stateCount = events.filter((event) => event.event_type === "cambio_estado").length;
 
   return (
-    <AppShell
-      title="Sugerencias y bugs"
-      subtitle="Hilo interno de seguimiento"
-      canViewGlobal={user.can_view_global_dashboard}
-    >
-      <div className="stack">
-        <section className="card">
-          <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
-            <div style={{ flex: "1 1 420px" }}>
-              <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-                <span className="crm-chip">{typeLabel(suggestion.suggestion_type)}</span>
-                <span className={`crm-chip ${statusChipClass(suggestion.status)}`}>{suggestion.status}</span>
+    <AppShell title="Sugerencias y bugs" subtitle="Hilo interno compacto" canViewGlobal={user.can_view_global_dashboard}>
+      <div className="feedback-layout">
+        <section className="feedback-main stack">
+          <article className="card feedback-hero-card">
+            <div className="feedback-hero-top">
+              <div>
+                <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                  <span className="crm-chip">{typeLabel(suggestion.suggestion_type)}</span>
+                  <span className={`crm-chip ${statusChipClass(suggestion.status)}`}>{suggestion.status}</span>
+                </div>
+                <h2>{starter.subject}</h2>
+                <p className="muted">Abierto por {ownerName} | {new Date(suggestion.created_at).toLocaleString("es-ES")}</p>
+                <p className="muted">Responsable: {assigneeName}</p>
               </div>
-              <h2 style={{ margin: "0 0 8px" }}>{starter.subject}</h2>
-              <p className="muted" style={{ margin: "0 0 6px" }}>
-                Abierto por {ownerName} | {new Date(suggestion.created_at).toLocaleString("es-ES")}
-              </p>
-              <p className="muted" style={{ margin: 0 }}>
-                Responsable: {assigneeName}
-              </p>
+              <Link href="/sugerencias" className="companies-tab">Volver a la bandeja</Link>
             </div>
-            <Link href="/sugerencias" className="contacts-tab">
-              Volver a la bandeja
-            </Link>
-          </div>
-        </section>
 
-        <section className="card">
-          <div className="stats-grid">
-            <div className="card">
-              <strong>{messageCount}</strong>
-              <div className="muted">Mensajes internos</div>
+            <div className="feedback-metrics-grid">
+              <article className="feedback-metric-card">
+                <strong>{messageCount}</strong>
+                <span>Mensajes</span>
+              </article>
+              <article className="feedback-metric-card">
+                <strong>{stateCount}</strong>
+                <span>Cambios</span>
+              </article>
+              <article className="feedback-metric-card">
+                <strong>{new Date(suggestion.updated_at).toLocaleString("es-ES")}</strong>
+                <span>Última actividad</span>
+              </article>
             </div>
-            <div className="card">
-              <strong>{events.filter((event) => event.event_type === "cambio_estado").length}</strong>
-              <div className="muted">Cambios de estado</div>
-            </div>
-            <div className="card">
-              <strong>{new Date(suggestion.updated_at).toLocaleString("es-ES")}</strong>
-              <div className="muted">Ultima actividad</div>
-            </div>
-          </div>
-        </section>
+          </article>
 
-        <section className="card">
-          <div className="row" style={{ gap: 24, alignItems: "flex-start", flexWrap: "wrap" }}>
-            <div style={{ flex: "2 1 480px", minWidth: 320 }}>
-              <h3 style={{ marginTop: 0 }}>Conversacion</h3>
-              <div className="suggestion-history">
-                <article className="suggestion-bubble suggestion-bubble-owner">
-                  <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                    <div className="muted">
-                      {ownerName} | {new Date(suggestion.created_at).toLocaleString("es-ES")}
+          <article className="card feedback-thread-card">
+            <div className="form-actions-bar form-actions-bar-start">
+              <div>
+                <p className="workspace-kicker">Conversación</p>
+                <h3>Hilo interno</h3>
+              </div>
+            </div>
+            <div className="feedback-thread-list">
+              <article className="feedback-thread-item feedback-thread-item-owner">
+                <div className="feedback-thread-head">
+                  <div className="muted">{ownerName} | {new Date(suggestion.created_at).toLocaleString("es-ES")}</div>
+                  <span className="contact-followup-badge contact-followup-verde">INICIO</span>
+                </div>
+                <p>{starter.body || "Sin descripción adicional."}</p>
+              </article>
+
+              {events.map((event) => {
+                const isOwnMessage = event.created_by_user_id === user.id;
+                const authorName = (event.created_by_user_id ? nameById.get(event.created_by_user_id) : null) ?? event.created_by_email;
+                const badge = event.event_type === "cambio_estado" ? "ESTADO" : event.event_type === "creacion" ? "ALTA" : "MENSAJE";
+
+                return (
+                  <article key={event.id} className={`feedback-thread-item ${isOwnMessage ? "feedback-thread-item-owner" : "feedback-thread-item-other"}`}>
+                    <div className="feedback-thread-head">
+                      <div className="muted">{authorName} | {new Date(event.created_at).toLocaleString("es-ES")}</div>
+                      <span className="contact-followup-badge contact-followup-ambar">{badge}</span>
                     </div>
-                    <span className="contact-followup-badge contact-followup-verde">INICIO</span>
-                  </div>
-                  <p style={{ margin: "8px 0 0", whiteSpace: "pre-wrap" }}>{starter.body || "Sin descripcion adicional."}</p>
-                </article>
-
-                {events.map((event) => {
-                  const isOwnMessage = event.created_by_user_id === user.id;
-                  const authorName =
-                    (event.created_by_user_id ? nameById.get(event.created_by_user_id) : null) ?? event.created_by_email;
-                  const badge = event.event_type === "cambio_estado" ? "ESTADO" : event.event_type === "creacion" ? "ALTA" : "MENSAJE";
-
-                  return (
-                    <article
-                      key={event.id}
-                      className={`suggestion-bubble ${isOwnMessage ? "suggestion-bubble-owner" : "suggestion-bubble-other"}`}
-                    >
-                      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                        <div className="muted">
-                          {authorName} | {new Date(event.created_at).toLocaleString("es-ES")}
-                        </div>
-                        <span className="contact-followup-badge contact-followup-ambar">{badge}</span>
-                      </div>
-                      <p style={{ margin: "8px 0 0", whiteSpace: "pre-wrap" }}>{event.body}</p>
-                    </article>
-                  );
-                })}
-              </div>
+                    <p>{event.body}</p>
+                  </article>
+                );
+              })}
             </div>
-
-            <div style={{ flex: "1 1 320px", minWidth: 320 }} className="stack">
-              <form action={addMessageAction} className="card stack" style={{ padding: 18 }}>
-                <h3 style={{ marginTop: 0 }}>Nuevo mensaje</h3>
-                <textarea
-                  name="body"
-                  rows={7}
-                  placeholder="Escribe aqui el mensaje interno..."
-                  aria-label="Mensaje interno"
-                  required
-                />
-                <button type="submit">Enviar mensaje</button>
-                {searchParams?.ok === "message_sent" ? <p className="crm-inline-success">Mensaje enviado.</p> : null}
-                {searchParams?.error === "empty_message" ? <p className="crm-inline-error">Escribe un mensaje.</p> : null}
-              </form>
-
-              <form action={assignOwnerAction} className="card stack" style={{ padding: 18 }}>
-                <h3 style={{ marginTop: 0 }}>Responsable</h3>
-                <label>
-                  Asignar a
-                  <select name="assigned_to_user_id" defaultValue={suggestion.assigned_to_user_id ?? ""} aria-label="Asignar responsable">
-                    <option value="">Sin responsable</option>
-                    {assignableUsers.map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {userLabel(option)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button type="submit">Guardar responsable</button>
-                {searchParams?.ok === "assignee_updated" ? <p className="crm-inline-success">Responsable actualizado.</p> : null}
-                {searchParams?.error === "invalid_assignee" ? <p className="crm-inline-error">Responsable no valido.</p> : null}
-              </form>
-
-              <form action={updateStatusAction} className="card stack" style={{ padding: 18 }}>
-                <h3 style={{ marginTop: 0 }}>Estado</h3>
-                <label>
-                  Cambiar estado
-                  <select name="status" defaultValue={suggestion.status ?? "abierta"} aria-label="Cambiar estado">
-                    {STATUS_OPTIONS.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Nota del cambio
-                  <textarea
-                    name="note"
-                    rows={4}
-                    placeholder="Opcional, salvo si reabres una entrada cerrada"
-                    aria-label="Nota del cambio de estado"
-                  />
-                </label>
-                <button type="submit">Guardar estado</button>
-                {searchParams?.ok === "status_updated" ? <p className="crm-inline-success">Estado actualizado.</p> : null}
-                {searchParams?.error === "invalid_status" ? <p className="crm-inline-error">Estado no valido.</p> : null}
-                {searchParams?.error === "reopen_requires_note" ? (
-                  <p className="crm-inline-error">Para reabrir una entrada cerrada hace falta una nota.</p>
-                ) : null}
-              </form>
-            </div>
-          </div>
+          </article>
         </section>
+
+        <aside className="feedback-side stack">
+          <form action={addMessageAction} className="card feedback-form-card stack">
+            <h3>Nuevo mensaje</h3>
+            <textarea name="body" rows={7} placeholder="Escribe aquí el mensaje interno..." required />
+            <button type="submit">Enviar mensaje</button>
+            {searchParams?.ok === "message_sent" ? <p className="crm-inline-success">Mensaje enviado.</p> : null}
+            {searchParams?.error === "empty_message" ? <p className="crm-inline-error">Escribe un mensaje.</p> : null}
+          </form>
+
+          <form action={assignOwnerAction} className="card feedback-form-card stack">
+            <h3>Responsable</h3>
+            <label className="form-field">
+              <span>Asignar a</span>
+              <select name="assigned_to_user_id" defaultValue={suggestion.assigned_to_user_id ?? ""}>
+                <option value="">Sin responsable</option>
+                {assignableUsers.map((option) => (
+                  <option key={option.id} value={option.id}>{userLabel(option)}</option>
+                ))}
+              </select>
+            </label>
+            <button type="submit">Guardar responsable</button>
+            {searchParams?.ok === "assignee_updated" ? <p className="crm-inline-success">Responsable actualizado.</p> : null}
+            {searchParams?.error === "invalid_assignee" ? <p className="crm-inline-error">Responsable no válido.</p> : null}
+          </form>
+
+          <form action={updateStatusAction} className="card feedback-form-card stack">
+            <h3>Estado</h3>
+            <label className="form-field">
+              <span>Cambiar estado</span>
+              <select name="status" defaultValue={suggestion.status ?? "abierta"}>
+                {STATUS_OPTIONS.map((status) => (
+                  <option key={status} value={status}>{status}</option>
+                ))}
+              </select>
+            </label>
+            <label className="form-field">
+              <span>Nota del cambio</span>
+              <textarea name="note" rows={4} placeholder="Opcional, salvo si reabres una entrada cerrada" />
+            </label>
+            <button type="submit">Guardar estado</button>
+            {searchParams?.ok === "status_updated" ? <p className="crm-inline-success">Estado actualizado.</p> : null}
+            {searchParams?.error === "invalid_status" ? <p className="crm-inline-error">Estado no válido.</p> : null}
+            {searchParams?.error === "reopen_requires_note" ? <p className="crm-inline-error">Para reabrir hace falta una nota.</p> : null}
+          </form>
+        </aside>
       </div>
     </AppShell>
   );

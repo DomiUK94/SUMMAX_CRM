@@ -1,4 +1,5 @@
 ﻿import { revalidatePath } from "next/cache";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { StaticTable } from "@/components/ui/static-table";
@@ -10,9 +11,30 @@ type SearchProps = {
   searchParams?: {
     ok?: string;
     error?: string;
-    q?: string;
+    name?: string;
+    company?: string;
+    email?: string;
+    phone?: string;
+    role?: string;
+    priority?: string;
+    owner?: string;
+    comments?: string;
   };
 };
+
+const PRIORITY_OPTIONS = [
+  "Alta",
+  "Media",
+  "Baja",
+  "Pendiente de contactar",
+  "En contacto",
+  "NDA en curso",
+  "Revisión financiera",
+  "Interés confirmado",
+  "Contrato en curso",
+  "Cerrado",
+  "Descartado"
+] as const;
 
 export default async function ManageContactsPage({ searchParams }: SearchProps) {
   const user = await requireUser();
@@ -20,7 +42,16 @@ export default async function ManageContactsPage({ searchParams }: SearchProps) 
     redirect("/forbidden");
   }
   const db = createSourceCrmServerClient();
-  const q = String(searchParams?.q ?? "").trim();
+  const filters = {
+    name: String(searchParams?.name ?? "").trim(),
+    company: String(searchParams?.company ?? "").trim(),
+    email: String(searchParams?.email ?? "").trim(),
+    phone: String(searchParams?.phone ?? "").trim(),
+    role: String(searchParams?.role ?? "").trim(),
+    priority: String(searchParams?.priority ?? "").trim(),
+    owner: String(searchParams?.owner ?? "").trim(),
+    comments: String(searchParams?.comments ?? "").trim()
+  };
 
   async function updateContactsBulkAction(formData: FormData) {
     "use server";
@@ -72,11 +103,29 @@ export default async function ManageContactsPage({ searchParams }: SearchProps) 
     .order("updated_at", { ascending: false })
     .limit(120);
 
-  if (q) {
-    const pattern = `%${q}%`;
-    contactsQuery = contactsQuery.or(
-      `persona_contacto.ilike.${pattern},compania.ilike.${pattern},email.ilike.${pattern},telefono.ilike.${pattern},rol.ilike.${pattern},prioritario.ilike.${pattern},comentarios.ilike.${pattern}`
-    );
+  if (filters.name) {
+    contactsQuery = contactsQuery.ilike("persona_contacto", `%${filters.name}%`);
+  }
+  if (filters.company) {
+    contactsQuery = contactsQuery.ilike("compania", `%${filters.company}%`);
+  }
+  if (filters.email) {
+    contactsQuery = contactsQuery.ilike("email", `%${filters.email}%`);
+  }
+  if (filters.phone) {
+    contactsQuery = contactsQuery.ilike("telefono", `%${filters.phone}%`);
+  }
+  if (filters.role) {
+    contactsQuery = contactsQuery.ilike("rol", `%${filters.role}%`);
+  }
+  if (filters.priority) {
+    contactsQuery = contactsQuery.eq("prioritario", filters.priority);
+  }
+  if (filters.owner) {
+    contactsQuery = contactsQuery.eq("owner_user_id", filters.owner);
+  }
+  if (filters.comments) {
+    contactsQuery = contactsQuery.ilike("comentarios", `%${filters.comments}%`);
   }
 
   const [{ data: contacts }, { data: owners }] = await Promise.all([
@@ -85,58 +134,49 @@ export default async function ManageContactsPage({ searchParams }: SearchProps) 
   ]);
 
   return (
-    <AppShell title="Edici\u00f3n de contactos" subtitle="Revisi\u00f3n masiva con el mismo acabado que el CRM" canViewGlobal={user.can_view_global_dashboard}>
+    <AppShell title="Modificar contactos" subtitle="Edición masiva con el mismo estilo del CRM" canViewGlobal={user.can_view_global_dashboard}>
       <div className="editor-shell">
-        <section className="card editor-hero">
-          <div>
-            <p className="workspace-kicker">Operativa</p>
-            <h2>Actualiza contactos sin salir del flujo principal</h2>
-            <p className="muted">
-              Revisa propietarios, prioridad y datos base en una sola mesa de trabajo. La vista mantiene el tono del CRM y evita la sensaci\u00f3n de backoffice crudo.
-            </p>
-          </div>
-          <div className="editor-hero-metrics">
-            <div className="editor-hero-metric">
-              <strong>{contacts?.length ?? 0}</strong>
-              <span>contactos cargados</span>
-            </div>
-            <div className="editor-hero-metric">
-              <strong>{owners?.length ?? 0}</strong>
-              <span>owners activos</span>
-            </div>
-          </div>
-        </section>
-
         {searchParams?.ok === "1" ? <div className="notice notice-success">Cambios guardados correctamente.</div> : null}
         {searchParams?.error ? <div className="notice notice-error">Error: {searchParams.error}</div> : null}
 
-        <section className="card editor-card">
-          <div className="table-card-head">
-            <div>
-              <p className="workspace-kicker">Filtrado</p>
-              <h3>Buscar tramo de trabajo</h3>
-              <p className="muted">Reduce la tabla antes de editar para trabajar con un bloque m\u00e1s claro y controlado.</p>
-            </div>
-          </div>
-          <form method="get" className="entity-toolbar form-toolbar-surface">
-            <input className="toolbar-search" name="q" defaultValue={q} placeholder="Buscar por nombre, compa\u00f1\u00eda, email o comentario" />
-            <button type="submit">Aplicar</button>
-            {q ? <a href="/contacts/manage" className="contacts-tab">Limpiar</a> : null}
-          </form>
-        </section>
+        <form id="contacts-manage-filters" method="get" className="editor-hidden-filter-form" />
 
         <section className="card editor-card">
           <form action={updateContactsBulkAction} className="editor-stack">
-            <div className="form-actions-bar">
+            <div className="form-actions-bar form-actions-bar-manage-contacts">
               <div>
-                <p className="workspace-kicker">Edici\u00f3n masiva</p>
+                <p className="workspace-kicker">Edición masiva</p>
                 <h3>Tabla editable</h3>
               </div>
-              <button type="submit">Guardar cambios</button>
+              <div className="table-filter-actions table-filter-actions-inline table-filter-actions-center">
+                <button type="submit" form="contacts-manage-filters" className="button-outline-success">Aplicar filtros</button>
+                <Link href="/contacts/manage" className="companies-tab">Limpiar</Link>
+              </div>
+              <button type="submit" className="button-outline-danger editor-save-button">Guardar cambios</button>
             </div>
 
             <StaticTable
-              columns={["Nombre", "Compa\u00f1\u00eda", "Email", "Tel\u00e9fono", "Rol", "Prioridad", "Responsable", "Comentarios"]}
+              columns={["Nombre", "Compañía", "Email", "Teléfono", "Rol", "Prioridad", "Propietario", "Comentarios"]}
+              headerFilters={[
+                <input key="filter-name" name="name" form="contacts-manage-filters" defaultValue={filters.name} placeholder="Filtrar" />,
+                <input key="filter-company" name="company" form="contacts-manage-filters" defaultValue={filters.company} placeholder="Filtrar" />,
+                <input key="filter-email" name="email" form="contacts-manage-filters" defaultValue={filters.email} placeholder="Filtrar" />,
+                <input key="filter-phone" name="phone" form="contacts-manage-filters" defaultValue={filters.phone} placeholder="Filtrar" />,
+                <input key="filter-role" name="role" form="contacts-manage-filters" defaultValue={filters.role} placeholder="Filtrar" />,
+                <select key="filter-priority" name="priority" form="contacts-manage-filters" defaultValue={filters.priority}>
+                  <option value="">Todas</option>
+                  {PRIORITY_OPTIONS.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>,
+                <select key="filter-owner" name="owner" form="contacts-manage-filters" defaultValue={filters.owner}>
+                  <option value="">Todos</option>
+                  {(owners ?? []).map((o) => (
+                    <option key={o.id} value={o.id}>{o.full_name?.trim() || o.email}</option>
+                  ))}
+                </select>,
+                <input key="filter-comments" name="comments" form="contacts-manage-filters" defaultValue={filters.comments} placeholder="Filtrar" />
+              ]}
               rows={(contacts ?? []).map((c) => {
                 const id = String(c.contact_id);
                 return [
@@ -150,20 +190,12 @@ export default async function ManageContactsPage({ searchParams }: SearchProps) 
                   <input name={`role_${id}`} defaultValue={c.rol ?? ""} />,
                   <select name={`status_name_${id}`} defaultValue={c.prioritario ?? ""}>
                     <option value="">--</option>
-                    <option value="Alta">Alta</option>
-                    <option value="Media">Media</option>
-                    <option value="Baja">Baja</option>
-                    <option value="Pendiente de contactar">Pendiente de contactar</option>
-                    <option value="En contacto">En contacto</option>
-                    <option value="NDA en curso">NDA en curso</option>
-                    <option value="Revision financiera">Revision financiera</option>
-                    <option value="Interes confirmado">Interes confirmado</option>
-                    <option value="Contrato en curso">Contrato en curso</option>
-                    <option value="Cerrado">Cerrado</option>
-                    <option value="Descartado">Descartado</option>
+                    {PRIORITY_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
                   </select>,
                   <select name={`owner_user_id_${id}`} defaultValue={c.owner_user_id ?? ""}>
-                    <option value="">Sin responsable</option>
+                    <option value="">Sin propietario</option>
                     {(owners ?? []).map((o) => (
                       <option key={o.id} value={o.id}>
                         {o.full_name?.trim() || o.email}
@@ -174,7 +206,7 @@ export default async function ManageContactsPage({ searchParams }: SearchProps) 
                 ];
               })}
               emptyLabel="Sin contactos."
-              emptyHint="Ajusta la b\u00fasqueda o vuelve cuando haya registros disponibles para revisar."
+              emptyHint="Ajusta los filtros de la cabecera o vuelve cuando haya registros disponibles para revisar."
             />
           </form>
         </section>
@@ -182,3 +214,6 @@ export default async function ManageContactsPage({ searchParams }: SearchProps) 
     </AppShell>
   );
 }
+
+
+

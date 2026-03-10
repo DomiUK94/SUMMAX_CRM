@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -41,6 +41,7 @@ type ColumnKey =
 
 type ContactsViewMode = "table" | "timeline";
 type ContactsQuickFilter = "all" | "needs_action" | "critical";
+type ColumnFilterState = Partial<Record<ColumnKey, string>>;
 
 const DATA_COLUMN_ORDER: ColumnKey[] = [
   "id",
@@ -68,15 +69,17 @@ const COLUMN_LABELS: Record<ColumnKey, string> = {
   owner_email: "Propietario contacto",
   owner_user_id: "ID propietario",
   email: "Email",
-  phone: "Teléfono",
+  phone: "Telefono",
   role: "Rol",
   other_contact: "Otro contacto",
   linkedin: "LinkedIn",
   comments: "Comentarios",
-  updated_at: "Última actualización",
-  days_without_action: "Días sin acción",
+  updated_at: "Ultima actualizacion",
+  days_without_action: "Dias sin accion",
   follow_up_status: "Seguimiento"
 };
+
+const FOLLOW_UP_OPTIONS = ["rojo", "ambar", "verde"] as const;
 
 const STATUS_OPTIONS = [
   "Alta",
@@ -135,7 +138,7 @@ function fieldSavedMessage(field: "owner_user_id" | "prioritario" | "email" | "t
   if (field === "owner_user_id") return "Propietario actualizado.";
   if (field === "prioritario") return "Prioridad actualizada.";
   if (field === "email") return "Email actualizado.";
-  return "Teléfono actualizado.";
+  return "Telefono actualizado.";
 }
 
 export function ContactsTable({
@@ -150,8 +153,8 @@ export function ContactsTable({
   const router = useRouter();
   const prefix = storageKeyPrefix ?? "contacts";
 
-  const [searchDraft, setSearchDraft] = usePersistedState(`${prefix}:search_draft`, "");
-  const [searchApplied, setSearchApplied] = usePersistedState(`${prefix}:search_applied`, "");
+  const [columnFiltersDraft, setColumnFiltersDraft] = usePersistedState<ColumnFilterState>(`${prefix}:column_filters_draft`, {});
+  const [columnFiltersApplied, setColumnFiltersApplied] = usePersistedState<ColumnFilterState>(`${prefix}:column_filters_applied`, {});
   const [ownerToAssign, setOwnerToAssign] = useState("");
   const [assigning, setAssigning] = useState(false);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
@@ -178,21 +181,24 @@ export function ContactsTable({
   const savedViews = useSavedViews({
     module: "contacts",
     currentFilters: {
-      searchApplied,
+      columnFiltersApplied,
       quickFilter,
       viewMode,
       columns: columnVisibility
     },
     onApply: (filters) => {
-      const nextSearch = typeof filters.searchApplied === "string" ? filters.searchApplied : "";
+      const nextColumnFilters =
+        filters.columnFiltersApplied && typeof filters.columnFiltersApplied === "object"
+          ? (filters.columnFiltersApplied as ColumnFilterState)
+          : {};
       const nextQuick =
         filters.quickFilter === "all" || filters.quickFilter === "needs_action" || filters.quickFilter === "critical"
           ? filters.quickFilter
           : "all";
       const nextView = filters.viewMode === "timeline" ? "timeline" : "table";
       const nextColumns = (filters.columns as VisibilityState) ?? DEFAULT_COLUMNS;
-      setSearchDraft(nextSearch);
-      setSearchApplied(nextSearch);
+      setColumnFiltersDraft(nextColumnFilters);
+      setColumnFiltersApplied(nextColumnFilters);
       setQuickFilter(nextQuick);
       setViewMode(nextView);
       setColumnVisibility(nextColumns);
@@ -201,16 +207,23 @@ export function ContactsTable({
   });
 
   const filteredContacts = useMemo(() => {
-    const q = searchApplied.trim().toLowerCase();
-    const searchableColumns = DATA_COLUMN_ORDER.filter((key) => columnVisibility[key] !== false);
-    const searched = !q
-      ? contacts
-      : contacts.filter((contact) => searchableColumns.some((key) => displayValue(contact, key).toLowerCase().includes(q)));
+    const matchesColumnFilter = (contact: ListedContact, key: ColumnKey, rawValue: string) => {
+      const value = rawValue.trim().toLowerCase();
+      if (!value) return true;
+      if (key === "status_name") return (contact.status_name ?? "").toLowerCase() === value;
+      if (key === "owner_email") return (contact.owner_user_id ?? "") === rawValue;
+      if (key === "follow_up_status") return followUpLevel(contact.updated_at) === value;
+      return displayValue(contact, key).toLowerCase().includes(value);
+    };
+
+    const searched = contacts.filter((contact) =>
+      Object.entries(columnFiltersApplied).every(([key, value]) => matchesColumnFilter(contact, key as ColumnKey, String(value ?? "")))
+    );
 
     if (quickFilter === "needs_action") return searched.filter((contact) => daysWithoutAction(contact.updated_at) > 7);
     if (quickFilter === "critical") return searched.filter((contact) => daysWithoutAction(contact.updated_at) > 14);
     return searched;
-  }, [columnVisibility, contacts, quickFilter, searchApplied]);
+  }, [columnFiltersApplied, contacts, quickFilter]);
 
   async function assignOwnerBulk() {
     const selectedIds = table.getSelectedRowModel().rows.map((row) => row.original.id);
@@ -231,7 +244,7 @@ export function ContactsTable({
       setOwnerToAssign("");
       setRowSelection({});
       setBulkAssignOpen(false);
-      showToast("Propietario actualizado en la selección.", "success");
+      showToast("Propietario actualizado en la seleccion.", "success");
       router.refresh();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Error inesperado";
@@ -480,6 +493,10 @@ export function ContactsTable({
   const needsActionCount = contacts.filter((contact) => daysWithoutAction(contact.updated_at) > 7).length;
   const criticalCount = contacts.filter((contact) => daysWithoutAction(contact.updated_at) > 14).length;
 
+  function updateColumnFilter(key: ColumnKey, value: string) {
+    setColumnFiltersDraft((current) => ({ ...current, [key]: value }));
+    setColumnFiltersApplied((current) => ({ ...current, [key]: value }));
+  }
   function toggleColumn(key: ColumnKey) {
     const column = table.getColumn(key);
     if (!column) return;
@@ -497,20 +514,7 @@ export function ContactsTable({
       ) : null}
 
       <div className="entity-toolbar">
-        <input
-          className="contacts-search toolbar-search"
-          placeholder="Busca información de contacto en las columnas visibles"
-          value={searchDraft}
-          onChange={(event) => setSearchDraft(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              setSearchApplied(searchDraft);
-            }
-          }}
-        />
-        <button onClick={() => setSearchApplied(searchDraft)}>Aplicar</button>
-        <div className="entity-toolbar-inline">
+        <div className="entity-toolbar-inline entity-toolbar-inline-full">
           <div className="entity-toolbar-section entity-toolbar-view">
             <span className="entity-toolbar-section-title">Vista</span>
             <select value={viewMode} onChange={(event) => setViewMode(event.target.value as ContactsViewMode)}>
@@ -594,15 +598,15 @@ export function ContactsTable({
       </div>
 
       <div className="row" style={{ justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: 8 }}>
-        <div className="smart-tabs-row" role="tablist" aria-label="Filtros rápidos de contactos" style={{ margin: 0, flex: 1 }}>
+        <div className="smart-tabs-row" role="tablist" aria-label="Filtros rapidos de contactos" style={{ margin: 0, flex: 1 }}>
           <button className={quickFilter === "all" ? "smart-tab smart-tab-active" : "smart-tab"} onClick={() => setQuickFilter("all")}>
             <span className="smart-tab-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span><span>Todos</span>
           </button>
           <button className={quickFilter === "needs_action" ? "smart-tab smart-tab-active" : "smart-tab"} onClick={() => setQuickFilter("needs_action")}>
-            Requieren acción <span className="contacts-badge">{needsActionCount}</span>
+            Requieren accion <span className="contacts-badge">{needsActionCount}</span>
           </button>
           <button className={quickFilter === "critical" ? "smart-tab smart-tab-active" : "smart-tab"} onClick={() => setQuickFilter("critical")}>
-            Críticos +14 días <span className="contacts-badge">{criticalCount}</span>
+            Criticos +14 dias <span className="contacts-badge">{criticalCount}</span>
           </button>
         </div>
 
@@ -611,7 +615,7 @@ export function ContactsTable({
         <Dialog.Root open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
           <Dialog.Trigger asChild>
             <button type="button" className="bulk-assign-trigger">
-              Asignación múltiple
+              Asignacion multiple
             </button>
           </Dialog.Trigger>
           <Dialog.Portal>
@@ -622,13 +626,13 @@ export function ContactsTable({
                   <Dialog.Title>Asignar propietarios</Dialog.Title>
                   <Dialog.Description>
                     {selectedCount > 0
-                      ? `Se aplicará a ${selectedCount} contacto${selectedCount === 1 ? "" : "s"} seleccionados.`
-                      : "Selecciona una o más filas en la tabla para habilitar la asignación."}
+                      ? `Se aplicara a ${selectedCount} contacto${selectedCount === 1 ? "" : "s"} seleccionados.`
+                      : "Selecciona una o mas filas en la tabla para habilitar la asignacion."}
                   </Dialog.Description>
                 </div>
                 <Dialog.Close asChild>
                   <button type="button" className="radix-dialog-close" aria-label="Cerrar">
-                    ×
+                    x
                   </button>
                 </Dialog.Close>
               </div>
@@ -658,7 +662,7 @@ export function ContactsTable({
                   </button>
                 </Dialog.Close>
                 <button onClick={assignOwnerBulk} disabled={!ownerToAssign || selectedCount === 0 || assigning}>
-                  {assigning ? "Asignando..." : "Confirmar asignación"}
+                  {assigning ? "Asignando..." : "Confirmar asignacion"}
                 </button>
               </div>
             </Dialog.Content>
@@ -690,12 +694,32 @@ export function ContactsTable({
           {timelineRows.length === 0 ? <p className="muted">Sin contactos.</p> : null}
         </div>
       ) : (
-        <DataTable
-          table={table}
-          emptyLabel="Sin contactos."
-          emptyHint="Prueba otro filtro o crea el primer contacto para empezar a trabajar la vista."
-          emptyAction={<Link href="/contacts/new" className="contacts-tab"><span className="module-tab-icon" aria-hidden="true"><CrmIcon name="plus" className="crm-icon" /></span><span>Crear contacto</span></Link>}
-        />
+        <>
+          <DataTable
+            table={table}
+            headerFilters={{
+              select: null,
+              id: <input value={columnFiltersDraft.id ?? ""} onChange={(event) => updateColumnFilter("id", event.target.value)} placeholder="Filtrar" />,
+              full_name: <input value={columnFiltersDraft.full_name ?? ""} onChange={(event) => updateColumnFilter("full_name", event.target.value)} placeholder="Filtrar" />,
+              investor_name: <input value={columnFiltersDraft.investor_name ?? ""} onChange={(event) => updateColumnFilter("investor_name", event.target.value)} placeholder="Filtrar" />,
+              status_name: <select value={columnFiltersDraft.status_name ?? ""} onChange={(event) => updateColumnFilter("status_name", event.target.value)}><option value="">Todas</option>{STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}</select>,
+              owner_email: <select value={columnFiltersDraft.owner_email ?? ""} onChange={(event) => updateColumnFilter("owner_email", event.target.value)}><option value="">Todos</option>{owners.map((owner) => <option key={owner.id} value={owner.id}>{owner.full_name?.trim() || owner.email}</option>)}</select>,
+              owner_user_id: <input value={columnFiltersDraft.owner_user_id ?? ""} onChange={(event) => updateColumnFilter("owner_user_id", event.target.value)} placeholder="Filtrar" />,
+              email: <input value={columnFiltersDraft.email ?? ""} onChange={(event) => updateColumnFilter("email", event.target.value)} placeholder="Filtrar" />,
+              phone: <input value={columnFiltersDraft.phone ?? ""} onChange={(event) => updateColumnFilter("phone", event.target.value)} placeholder="Filtrar" />,
+              role: <input value={columnFiltersDraft.role ?? ""} onChange={(event) => updateColumnFilter("role", event.target.value)} placeholder="Filtrar" />,
+              other_contact: <input value={columnFiltersDraft.other_contact ?? ""} onChange={(event) => updateColumnFilter("other_contact", event.target.value)} placeholder="Filtrar" />,
+              linkedin: <input value={columnFiltersDraft.linkedin ?? ""} onChange={(event) => updateColumnFilter("linkedin", event.target.value)} placeholder="Filtrar" />,
+              comments: <input value={columnFiltersDraft.comments ?? ""} onChange={(event) => updateColumnFilter("comments", event.target.value)} placeholder="Filtrar" />,
+              updated_at: <input value={columnFiltersDraft.updated_at ?? ""} onChange={(event) => updateColumnFilter("updated_at", event.target.value)} placeholder="Filtrar" />,
+              days_without_action: <input value={columnFiltersDraft.days_without_action ?? ""} onChange={(event) => updateColumnFilter("days_without_action", event.target.value)} placeholder="Filtrar" />,
+              follow_up_status: <select value={columnFiltersDraft.follow_up_status ?? ""} onChange={(event) => updateColumnFilter("follow_up_status", event.target.value)}><option value="">Todos</option>{FOLLOW_UP_OPTIONS.map((status) => <option key={status} value={status}>{status.toUpperCase()}</option>)}</select>
+            }}
+            emptyLabel="Sin contactos."
+            emptyHint="Prueba otro filtro o crea el primer contacto para empezar a trabajar la vista."
+            emptyAction={<Link href="/contacts/new" className="contacts-tab"><span className="module-tab-icon" aria-hidden="true"><CrmIcon name="plus" className="crm-icon" /></span><span>Crear contacto</span></Link>}
+          />
+        </>
       )}
 
       <Dialog.Root open={Boolean(quickViewContact)} onOpenChange={(open) => (!open ? setQuickViewContact(null) : null)}>
@@ -707,11 +731,11 @@ export function ContactsTable({
                 <div className="radix-dialog-head">
                   <div>
                     <Dialog.Title>{quickViewContact.full_name}</Dialog.Title>
-                    <Dialog.Description>{quickViewContact.investor_name ?? "Sin compañía asociada"}</Dialog.Description>
+                    <Dialog.Description>{quickViewContact.investor_name ?? "Sin compañia asociada"}</Dialog.Description>
                   </div>
                   <Dialog.Close asChild>
                     <button type="button" className="radix-dialog-close" aria-label="Cerrar">
-                      ×
+                      x
                     </button>
                   </Dialog.Close>
                 </div>
@@ -722,8 +746,8 @@ export function ContactsTable({
                     <strong>{quickViewContact.email ?? "Sin email"}</strong>
                   </div>
                   <div className="contact-quick-sheet-item">
-                    <span>Teléfono</span>
-                    <strong>{quickViewContact.phone ?? "Sin teléfono"}</strong>
+                    <span>Telefono</span>
+                    <strong>{quickViewContact.phone ?? "Sin telefono"}</strong>
                   </div>
                   <div className="contact-quick-sheet-item">
                     <span>Propietario</span>
@@ -742,13 +766,13 @@ export function ContactsTable({
                       <span className={`contact-followup-badge contact-followup-${followUpLevel(quickViewContact.updated_at)}`}>
                         {followUpLevel(quickViewContact.updated_at).toUpperCase()}
                       </span>
-                      <span className="contact-quick-sheet-muted">{daysWithoutAction(quickViewContact.updated_at)} días sin acción</span>
+                      <span className="contact-quick-sheet-muted">{daysWithoutAction(quickViewContact.updated_at)} dias sin accion</span>
                     </div>
                   </div>
 
                   <div className="contact-quick-sheet-panel">
-                    <p className="contact-quick-sheet-label">Notas rápidas</p>
-                    <p className="contact-quick-sheet-copy">{quickViewContact.comments ?? "Sin comentarios todavía."}</p>
+                    <p className="contact-quick-sheet-label">Notas rapidas</p>
+                    <p className="contact-quick-sheet-copy">{quickViewContact.comments ?? "Sin comentarios todavia."}</p>
                   </div>
 
                   <div className="contact-quick-sheet-panel">
@@ -773,7 +797,7 @@ export function ContactsTable({
                     <button type="button" className="quick-pill quick-pill-ghost">Cerrar</button>
                   </Dialog.Close>
                   <Link href={`/contacts/${encodeURIComponent(quickViewContact.id)}`} className="contacts-add">
-                    <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="edit" className="crm-icon" /></span>
+                    <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="report" className="crm-icon" /></span>
                     <span>Abrir ficha completa</span>
                   </Link>
                 </div>
@@ -785,6 +809,16 @@ export function ContactsTable({
     </>
   );
 }
+
+
+
+
+
+
+
+
+
+
 
 
 

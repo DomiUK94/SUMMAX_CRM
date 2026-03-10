@@ -9,17 +9,20 @@ type DataTableProps<TData> = {
   emptyHint?: ReactNode;
   emptyAction?: ReactNode;
   className?: string;
+  headerFilters?: Record<string, ReactNode>;
 };
 
-export function DataTable<TData>({ table, emptyLabel, emptyHint, emptyAction, className }: DataTableProps<TData>) {
+export function DataTable<TData>({ table, emptyLabel, emptyHint, emptyAction, className, headerFilters }: DataTableProps<TData>) {
   const columnsCount = table.getVisibleLeafColumns().length;
   const rows = table.getRowModel().rows;
+  const headerGroups = table.getHeaderGroups();
+  const leafHeaders = headerGroups[headerGroups.length - 1]?.headers ?? [];
 
   return (
     <div className={`table-shell ${className ?? "contacts-table-wrap"}`.trim()}>
       <table className="contacts-crm-table">
         <thead>
-          {table.getHeaderGroups().map((headerGroup) => (
+          {headerGroups.map((headerGroup) => (
             <tr key={headerGroup.id}>
               {headerGroup.headers.map((header) => (
                 <th key={header.id}>
@@ -28,6 +31,15 @@ export function DataTable<TData>({ table, emptyLabel, emptyHint, emptyAction, cl
               ))}
             </tr>
           ))}
+          {headerFilters ? (
+            <tr className="table-filter-row">
+              {leafHeaders.map((header) => (
+                <th key={`${header.id}-filter`}>
+                  {header.isPlaceholder ? null : (headerFilters[header.column.id] ?? null)}
+                </th>
+              ))}
+            </tr>
+          ) : null}
         </thead>
         <tbody>
           {rows.length === 0 ? (

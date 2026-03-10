@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -31,7 +31,7 @@ export function WorkspaceQuickLinks() {
       <div className="workspace-quick-links">
         <Link href="/investors/new" className="quick-pill">
           <span className="quick-pill-icon" aria-hidden="true"><CrmIcon name="plus" className="crm-icon" /></span>
-          <span>Nuevo</span>
+          <span>Nueva</span>
         </Link>
         <Link href="/investors/manage" className="quick-pill quick-pill-ghost">
           <span className="quick-pill-icon" aria-hidden="true"><CrmIcon name="edit" className="crm-icon" /></span>
@@ -43,3 +43,4 @@ export function WorkspaceQuickLinks() {
 
   return null;
 }
+

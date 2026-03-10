@@ -52,7 +52,7 @@ type DealTableRow = {
 const COLUMN_ORDER: DealColumnKey[] = ["name", "amount", "closeDate", "priority", "stage", "contactName", "companyId", "createdDate"];
 
 const DEAL_LABELS: Record<DealColumnKey, string> = {
-  name: "Nombre de cuenta",
+  name: "Nombre de compañia",
   amount: "Importe total",
   closeDate: "Fecha estimada de cierre",
   priority: "Prioridad",
@@ -597,7 +597,7 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
                   </Dialog.Close>
                   <Link href={`/investors/${selectedDeal.card.id}`} className="contacts-add">
                     <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="edit" className="crm-icon" /></span>
-                    <span>Abrir cuenta</span>
+                    <span>Abrir compañia</span>
                   </Link>
                 </div>
               </>
@@ -608,3 +608,5 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
     </>
   );
 }
+
+

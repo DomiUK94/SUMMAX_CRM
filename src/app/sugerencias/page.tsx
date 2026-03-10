@@ -75,6 +75,14 @@ function withResult(pathname: string, key: "ok" | "error", value: string): strin
   return `${pathname}?${params.toString()}`;
 }
 
+function splitSuggestionText(rawText: string) {
+  const [subjectLine, ...bodyLines] = rawText.split(/\r?\n/);
+  return {
+    subject: subjectLine.trim() || "Sin asunto",
+    body: bodyLines.join(" ").trim()
+  };
+}
+
 export default async function SugerenciasPage({ searchParams }: SearchProps) {
   const user = await requireUser();
   const db = createSourceCrmServerClient();
@@ -167,16 +175,9 @@ export default async function SugerenciasPage({ searchParams }: SearchProps) {
   const suggestions: SuggestionRow[] = suggestionsData ?? [];
   const users: UserOption[] = usersData ?? [];
   const suggestionIds = suggestions.map((item) => item.id);
-
   const events: SuggestionEventRow[] =
     suggestionIds.length > 0
-      ? ((
-          await db
-            .from("suggestion_events")
-            .select("id, suggestion_id, body, event_type, created_by_email, created_at")
-            .in("suggestion_id", suggestionIds)
-            .order("created_at", { ascending: false })
-        ).data ?? [])
+      ? ((await db.from("suggestion_events").select("id, suggestion_id, body, event_type, created_by_email, created_at").in("suggestion_id", suggestionIds).order("created_at", { ascending: false })).data ?? [])
       : [];
 
   const eventsBySuggestion = new Map<string, SuggestionEventRow[]>();
@@ -191,177 +192,135 @@ export default async function SugerenciasPage({ searchParams }: SearchProps) {
   const bugsCount = suggestions.filter((item) => item.suggestion_type === "bug").length;
 
   return (
-    <AppShell
-      title="Sugerencias y bugs"
-      subtitle="Una bandeja simple para sugerencias, bugs, notas, responsable y mensajes internos"
-      canViewGlobal={user.can_view_global_dashboard}
-    >
-      <div className="stack">
-        <section className="card">
-          <div className="row" style={{ alignItems: "flex-start", gap: 20, flexWrap: "wrap" }}>
-            <div style={{ flex: "1 1 320px" }}>
-              <p className="workspace-kicker">Canal interno</p>
-              <h2 style={{ marginTop: 0 }}>Abre una entrada, asigna responsable y sigue la conversacion</h2>
-              <p className="muted" style={{ marginBottom: 0 }}>
-                Cada entrada puede ser una sugerencia, un bug o una nota. Ahora tambien puedes dejar un responsable
-                desde el alta y reasignarlo dentro del hilo.
-              </p>
+    <AppShell title="Sugerencias y bugs" subtitle="Canal interno compacto para notas, bugs y propuestas" canViewGlobal={user.can_view_global_dashboard}>
+      <div className="feedback-layout">
+        <section className="feedback-main stack">
+          <article className="card feedback-hero-card">
+            <div className="feedback-hero-top">
+              <div>
+                <p className="workspace-kicker">Canal interno</p>
+                <h2>Bandeja de seguimiento del equipo</h2>
+                <p className="muted">Centraliza sugerencias, bugs y notas con responsable, mensajes internos y cambios de estado en una sola vista.</p>
+              </div>
+              <div className="feedback-view-tabs">
+                <Link href="/sugerencias?view=mine" className={view === "mine" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>Mis abiertas</Link>
+                {isAdmin ? <Link href="/sugerencias?view=team" className={view === "team" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>Equipo</Link> : null}
+                <Link href="/sugerencias?view=closed" className={view === "closed" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>Cerradas</Link>
+              </div>
             </div>
-            <div className="stats-grid" style={{ flex: "1 1 320px" }}>
-              <div className="card">
+
+            <div className="feedback-metrics-grid">
+              <article className="feedback-metric-card">
                 <strong>{openItems.length}</strong>
-                <div className="muted">Abiertas</div>
-              </div>
-              <div className="card">
+                <span>Abiertas</span>
+              </article>
+              <article className="feedback-metric-card">
                 <strong>{bugsCount}</strong>
-                <div className="muted">Bugs visibles</div>
-              </div>
-              <div className="card">
+                <span>Bugs</span>
+              </article>
+              <article className="feedback-metric-card">
                 <strong>{closedItems.length}</strong>
-                <div className="muted">Cerradas</div>
-              </div>
+                <span>Cerradas</span>
+              </article>
             </div>
-          </div>
+          </article>
+
+          {searchParams?.ok === "created" ? <div className="notice notice-success">Entrada creada.</div> : null}
+          {searchParams?.error === "missing_fields" ? <div className="notice notice-error">Completa asunto y mensaje.</div> : null}
+          {searchParams?.error === "invalid_assignee" ? <div className="notice notice-error">Responsable no válido.</div> : null}
+          {searchParams?.error === "create_failed" ? <div className="notice notice-error">No se pudo crear la entrada.</div> : null}
+
+          <section className="feedback-list stack">
+            {suggestions.map((item) => {
+              const summary = splitSuggestionText(item.suggestion_text);
+              const threadEvents = eventsBySuggestion.get(item.id) ?? [];
+              const lastMessage = threadEvents[0];
+              const preview = summary.body || summary.subject;
+
+              return (
+                <article key={item.id} className="card feedback-item-card">
+                  <div className="feedback-item-top">
+                    <div className="feedback-item-copy">
+                      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                        <span className="crm-chip">{typeLabel(item.suggestion_type)}</span>
+                        <span className={`crm-chip ${statusChipClass(item.status)}`}>{item.status}</span>
+                      </div>
+                      <h3>{summary.subject}</h3>
+                      <p className="muted">{preview.length > 180 ? `${preview.slice(0, 180)}...` : preview}</p>
+                    </div>
+                    <div className="feedback-item-meta">
+                      <div><span>Creador</span><strong>{item.created_by_email}</strong></div>
+                      <div><span>Responsable</span><strong>{item.assigned_to_email ?? "Sin responsable"}</strong></div>
+                      <div><span>Actualizada</span><strong>{new Date(item.updated_at).toLocaleString("es-ES")}</strong></div>
+                      <div><span>Mensajes</span><strong>{threadEvents.filter((event) => event.event_type !== "creacion").length}</strong></div>
+                    </div>
+                  </div>
+
+                  {lastMessage ? (
+                    <div className="feedback-item-last">
+                      <div className="muted">Último movimiento: {lastMessage.created_by_email} | {new Date(lastMessage.created_at).toLocaleString("es-ES")}</div>
+                      <p>{lastMessage.body.length > 140 ? `${lastMessage.body.slice(0, 140)}...` : lastMessage.body}</p>
+                    </div>
+                  ) : null}
+
+                  <div className="feedback-item-actions">
+                    <Link href={`/sugerencias/${item.id}`} className="companies-tab">Abrir hilo</Link>
+                  </div>
+                </article>
+              );
+            })}
+
+            {suggestions.length === 0 ? <div className="card"><p style={{ margin: 0 }}>No hay entradas en esta vista.</p></div> : null}
+          </section>
         </section>
 
-        <section className="card">
-          <div className="row" style={{ alignItems: "flex-start", gap: 24, flexWrap: "wrap" }}>
-            <form action={createEntryAction} className="stack" style={{ flex: "1 1 380px", minWidth: 320 }}>
-              <h3 style={{ marginTop: 0 }}>Nueva entrada</h3>
-              <label>
-                Tipo
-                <select name="suggestion_type" defaultValue="sugerencia" aria-label="Tipo de entrada">
+        <aside className="feedback-side stack">
+          <article className="card feedback-form-card">
+            <div>
+              <p className="workspace-kicker">Nueva entrada</p>
+              <h3>Crear hilo</h3>
+            </div>
+            <form action={createEntryAction} className="stack">
+              <label className="form-field">
+                <span>Tipo</span>
+                <select name="suggestion_type" defaultValue="sugerencia">
                   <option value="sugerencia">Sugerencia</option>
                   <option value="bug">Bug</option>
                   <option value="nota">Nota</option>
                 </select>
               </label>
-              <label>
-                Asunto
-                <input name="subject" placeholder="Ej. Error al guardar una actividad" aria-label="Asunto" required />
+              <label className="form-field">
+                <span>Asunto</span>
+                <input name="subject" placeholder="Ej. Error al guardar una actividad" required />
               </label>
-              <label>
-                Responsable
-                <select name="assigned_to_user_id" defaultValue={user.id} aria-label="Responsable inicial">
+              <label className="form-field">
+                <span>Responsable</span>
+                <select name="assigned_to_user_id" defaultValue={user.id}>
                   <option value="">Sin responsable</option>
                   {users.map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {userLabel(option)}
-                    </option>
+                    <option key={option.id} value={option.id}>{userLabel(option)}</option>
                   ))}
                 </select>
               </label>
-              <label>
-                Mensaje inicial
-                <textarea
-                  name="body"
-                  rows={6}
-                  placeholder="Explica que pasa, que propones o que nota quieres dejar..."
-                  aria-label="Mensaje inicial"
-                  required
-                />
+              <label className="form-field">
+                <span>Mensaje inicial</span>
+                <textarea name="body" rows={7} placeholder="Explica el contexto o la propuesta..." required />
               </label>
               <button type="submit">Crear hilo</button>
             </form>
+          </article>
 
-            <div style={{ flex: "1 1 320px", minWidth: 320 }}>
-              <h3 style={{ marginTop: 0 }}>Vistas</h3>
-              <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-                <Link href="/sugerencias?view=mine" className={view === "mine" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>
-                  Mis abiertas
-                </Link>
-                {isAdmin ? (
-                  <Link href="/sugerencias?view=team" className={view === "team" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>
-                    Bandeja equipo
-                  </Link>
-                ) : null}
-                <Link href="/sugerencias?view=closed" className={view === "closed" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>
-                  Cerradas
-                </Link>
-              </div>
-              <p className="muted" style={{ marginBottom: 0 }}>
-                {view === "mine"
-                  ? "Entradas creadas por ti o asignadas a ti."
-                  : view === "team"
-                    ? "Conversaciones abiertas para seguimiento del equipo."
-                    : "Entradas resueltas o descartadas."}
-              </p>
-              {searchParams?.ok === "created" ? <p className="crm-inline-success">Entrada creada.</p> : null}
-              {searchParams?.error === "missing_fields" ? <p className="crm-inline-error">Completa asunto y mensaje.</p> : null}
-              {searchParams?.error === "invalid_assignee" ? <p className="crm-inline-error">Responsable no valido.</p> : null}
-              {searchParams?.error === "create_failed" ? <p className="crm-inline-error">No se pudo crear la entrada.</p> : null}
-            </div>
-          </div>
-        </section>
-
-        <section className="card">
-          <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-            <h3 style={{ margin: 0 }}>
-              {view === "mine" ? "Mis conversaciones" : view === "team" ? "Bandeja del equipo" : "Conversaciones cerradas"}
-            </h3>
-            <span className="muted">{suggestions.length} entradas</span>
-          </div>
-
-          <div className="stack" style={{ marginTop: 16 }}>
-            {suggestions.map((item) => {
-              const [subjectLine, ...bodyLines] = item.suggestion_text.split(/\r?\n/);
-              const threadEvents = eventsBySuggestion.get(item.id) ?? [];
-              const lastMessage = threadEvents[0];
-              const previewSource = bodyLines.join(" ").trim() || subjectLine.trim();
-
-              return (
-                <article key={item.id} className="card" style={{ padding: 18 }}>
-                  <div className="row" style={{ justifyContent: "space-between", alignItems: "flex-start", gap: 16, flexWrap: "wrap" }}>
-                    <div style={{ flex: "1 1 420px" }}>
-                      <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-                        <span className="crm-chip">{typeLabel(item.suggestion_type)}</span>
-                        <span className={`crm-chip ${statusChipClass(item.status)}`}>{item.status}</span>
-                      </div>
-                      <h4 style={{ margin: "0 0 8px" }}>{subjectLine.trim() || "Sin asunto"}</h4>
-                      <p className="muted" style={{ margin: "0 0 8px" }}>
-                        {previewSource.length > 180 ? `${previewSource.slice(0, 180)}...` : previewSource}
-                      </p>
-                      <p className="muted" style={{ margin: 0 }}>
-                        Responsable: {item.assigned_to_email ?? "Sin responsable"}
-                      </p>
-                    </div>
-                    <div style={{ minWidth: 220 }}>
-                      <p style={{ margin: "0 0 8px" }}>
-                        <strong>Creador:</strong> {item.created_by_email}
-                      </p>
-                      <p style={{ margin: "0 0 8px" }}>
-                        <strong>Actualizada:</strong> {new Date(item.updated_at).toLocaleString("es-ES")}
-                      </p>
-                      <p style={{ margin: "0 0 12px" }}>
-                        <strong>Mensajes:</strong> {threadEvents.filter((event) => event.event_type !== "creacion").length}
-                      </p>
-                      <Link href={`/sugerencias/${item.id}`} className="contacts-tab">
-                        Abrir hilo
-                      </Link>
-                    </div>
-                  </div>
-
-                  {lastMessage ? (
-                    <div className="card" style={{ marginTop: 14, padding: 14 }}>
-                      <p className="muted" style={{ margin: 0 }}>
-                        Ultimo movimiento: {lastMessage.created_by_email} | {new Date(lastMessage.created_at).toLocaleString("es-ES")}
-                      </p>
-                      <p style={{ margin: "6px 0 0" }}>
-                        {lastMessage.body.length > 140 ? `${lastMessage.body.slice(0, 140)}...` : lastMessage.body}
-                      </p>
-                    </div>
-                  ) : null}
-                </article>
-              );
-            })}
-
-            {suggestions.length === 0 ? (
-              <div className="card">
-                <p style={{ margin: 0 }}>No hay entradas en esta vista.</p>
-              </div>
-            ) : null}
-          </div>
-        </section>
+          <article className="card feedback-form-card">
+            <h3>Vista actual</h3>
+            <p className="muted">
+              {view === "mine"
+                ? "Entradas creadas por ti o asignadas a ti."
+                : view === "team"
+                  ? "Conversaciones abiertas para seguimiento del equipo."
+                  : "Entradas resueltas o descartadas."}
+            </p>
+          </article>
+        </aside>
       </div>
     </AppShell>
   );

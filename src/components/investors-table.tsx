@@ -26,7 +26,7 @@ const COLUMN_ORDER: InvestorColumnKey[] = ["id", "name", "category", "website", 
 
 const INVESTOR_LABELS: Record<InvestorColumnKey, string> = {
   id: "ID",
-  name: "Nombre cuenta",
+  name: "Nombre compañia",
   category: "Categoría",
   website: "Web",
   strategy: "Estrategia",
@@ -135,7 +135,7 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `cuentas-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `companias-${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -236,7 +236,7 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
       <div className="entity-toolbar">
         <input
           className="companies-search toolbar-search"
-          placeholder="Buscar cuenta o dato visible"
+          placeholder="Buscar compañia o dato visible"
           value={searchDraft}
           onChange={(event) => setSearchDraft(event.target.value)}
           onKeyDown={(event) => {
@@ -349,8 +349,8 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
 
       <DataTable
         table={table}
-        emptyLabel="Sin cuentas."
-        emptyHint="Ajusta los filtros o crea una nueva cuenta para empezar a mover el pipeline."
+        emptyLabel="Sin compañias."
+        emptyHint="Ajusta los filtros o crea una nueva compañia para empezar a mover el pipeline."
         className="companies-table-wrap"
       />
 
@@ -401,7 +401,7 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
                     <button type="button" className="quick-pill quick-pill-ghost">Cerrar</button>
                   </Dialog.Close>
                   <Link href={`/investors/${encodeURIComponent(selected.id)}`} className="contacts-add">
-                    <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="edit" className="crm-icon" /></span>
+                    <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="report" className="crm-icon" /></span>
                     <span>Abrir ficha completa</span>
                   </Link>
                 </div>
@@ -413,3 +413,6 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
     </>
   );
 }
+
+
+

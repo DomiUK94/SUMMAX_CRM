@@ -1,108 +1,322 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { StaticTable } from "@/components/ui/static-table";
+import { CrmIcon } from "@/components/ui/crm-icon";
+import { CompanyDetailCenter } from "@/components/company-detail-center";
+import { CompanyNotesDialog } from "@/components/company-notes-dialog";
 import { requireUser } from "@/lib/auth/session";
-import { addComment, getInvestorById } from "@/lib/db/crm";
+import { addEntityNote, getInvestorById, updateInvestorProfile } from "@/lib/db/crm";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
-export default async function InvestorDetailPage({ params }: { params: { id: string } }) {
+type PageProps = {
+  params: { id: string };
+  searchParams?: { ok?: string; error?: string };
+};
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("es-ES");
+}
+
+export default async function InvestorDetailPage({ params, searchParams }: PageProps) {
   const user = await requireUser();
   const data = await getInvestorById(params.id);
   const db = createSourceCrmServerClient();
-  const [activitiesRes, auditRes] = await Promise.all([
-    db.from("activities").select("id, title, activity_type, occurred_at, body").eq("entity_type", "investor").eq("entity_id", Number(params.id)).order("occurred_at", { ascending: false }).limit(10),
-    db.from("audit_log").select("id, field, old_value, new_value, action, changed_by_email, changed_at").eq("entity_type", "investor").eq("entity_id", params.id).order("changed_at", { ascending: false }).limit(20)
+  const [activitiesRes, notesRes] = await Promise.all([
+    db
+      .from("activities")
+      .select("id, title, activity_type, occurred_at, body")
+      .eq("entity_type", "investor")
+      .eq("entity_id", Number(params.id))
+      .order("occurred_at", { ascending: false })
+      .limit(8),
+    db
+      .from("entity_notes")
+      .select("id, body, created_at, created_by_email")
+      .eq("entity_type", "investor")
+      .eq("entity_id", params.id)
+      .order("created_at", { ascending: false })
   ]);
 
-  async function addCommentAction(formData: FormData) {
+  async function addNoteAction(formData: FormData) {
     "use server";
     const actor = await requireUser();
     const body = String(formData.get("body") ?? "").trim();
     if (!body) return;
-    await addComment({
+
+    await addEntityNote({
       entity_type: "investor",
       entity_id: params.id,
       body,
       created_by_user_id: actor.id,
       created_by_email: actor.email
     });
+
     revalidatePath(`/investors/${params.id}`);
+    redirect(`/investors/${params.id}?ok=note`);
+  }
+
+  async function updateInvestorAction(formData: FormData) {
+    "use server";
+    const actor = await requireUser();
+
+    try {
+      await updateInvestorProfile({
+        investor_id: params.id,
+        name: String(formData.get("name") ?? "").trim(),
+        category: String(formData.get("category") ?? "").trim() || undefined,
+        website: String(formData.get("website") ?? "").trim() || undefined,
+        strategy: String(formData.get("strategy") ?? "").trim() || undefined,
+        address: String(formData.get("address") ?? "").trim() || undefined,
+        linkedin: String(formData.get("linkedin") ?? "").trim() || undefined,
+        portfolio: String(formData.get("portfolio") ?? "").trim() || undefined,
+        comments: String(formData.get("comments") ?? "").trim() || undefined,
+        fit: String(formData.get("fit") ?? "").trim() || undefined,
+        reason: String(formData.get("reason") ?? "").trim() || undefined,
+        min_investment: String(formData.get("min_investment") ?? "").trim() || undefined,
+        max_investment: String(formData.get("max_investment") ?? "").trim() || undefined,
+        priority: String(formData.get("priority") ?? "").trim() || undefined,
+        office: String(formData.get("office") ?? "").trim() || undefined,
+        company_size: String(formData.get("company_size") ?? "").trim() || undefined,
+        actor_user_id: actor.id,
+        actor_email: actor.email
+      });
+
+      revalidatePath(`/investors/${params.id}`);
+      redirect(`/investors/${params.id}?ok=profile`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudieron guardar los cambios";
+      redirect(`/investors/${params.id}?error=${encodeURIComponent(message)}`);
+    }
   }
 
   if (!data.investor) {
     return (
-      <AppShell title="Cuenta" canViewGlobal={user.can_view_global_dashboard}>
-        <div className="card">Cuenta no encontrada.</div>
+      <AppShell title="Compañia" canViewGlobal={user.can_view_global_dashboard}>
+        <div className="card">Compañia no encontrada.</div>
       </AppShell>
     );
   }
 
+  const investor = data.investor;
+  const contacts = data.contacts;
+  const activities = activitiesRes.data ?? [];
+  const notes = (notesRes.data ?? []).map((note) => ({
+    id: String(note.id),
+    body: note.body,
+    created_at: formatDateTime(note.created_at),
+    created_by_email: note.created_by_email ?? null
+  }));
+  const initials = investor.name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part: string) => part[0]?.toUpperCase() ?? "")
+    .join("");
+  const primaryContact = contacts[0] ?? null;
+  const lastTouch = activities[0]?.occurred_at ?? investor.updated_at;
+
+  const defaults = {
+    name: investor.name,
+    category: investor.category ?? "",
+    website: investor.website ?? "",
+    strategy: investor.strategy ?? "",
+    priority: investor.priority ?? "",
+    office: investor.office ?? "",
+    company_size: investor.company_size ?? "",
+    min_investment: investor.min_investment ?? "",
+    max_investment: investor.max_investment ?? "",
+    address: investor.address ?? "",
+    linkedin: investor.linkedin ?? "",
+    portfolio: investor.portfolio ?? "",
+    fit: investor.fit ?? "",
+    reason: investor.reason ?? "",
+    comments: investor.comments ?? ""
+  };
+
+  const completedDeals = (() => {
+    const signal = `${investor.fit ?? ""} ${investor.priority ?? ""}`.toLowerCase();
+    const isCompleted = signal.includes("ganado") || signal.includes("cerrado") || signal.includes("won");
+    if (!isCompleted) return [];
+    return [
+      {
+        id: investor.id,
+        name: investor.name,
+        amount: investor.max_investment ?? "--",
+        closedAt: formatDateTime(investor.updated_at)
+      }
+    ];
+  })();
+
+  const advancedItems = [
+    { label: "Estrategia", value: investor.strategy || "--" },
+    { label: "Tipo fondo", value: investor.tipo_fondo || "--" },
+    { label: "Mercados", value: investor.mercados || "--" },
+    { label: "Web", value: investor.website || "--" },
+    { label: "Portfolio", value: investor.portfolio || "--" },
+    { label: "LinkedIn", value: investor.linkedin || "--" },
+    { label: "Encaje SUMMAX", value: investor.fit || "--" },
+    { label: "Tamaño", value: investor.company_size || "--" },
+    { label: "Inversión mínima", value: investor.min_investment || "--" },
+    { label: "Inversión máxima", value: investor.max_investment || "--" },
+    { label: "Motivo", value: investor.reason || "--", wide: true },
+    { label: "Comentarios", value: investor.comments || "--", wide: true }
+  ];
+
+  const quickActions = [
+    { label: "Correo", icon: "mail" as const, href: primaryContact?.email ? `mailto:${primaryContact.email}` : undefined },
+    { label: "LinkedIn", icon: "linkedin" as const, href: investor.linkedin ? investor.linkedin : undefined, external: Boolean(investor.linkedin) },
+    { label: "Tarea", icon: "task" as const, href: `/actividades/new?investor_id=${encodeURIComponent(params.id)}` },
+    { label: "M\u00e1s", icon: "more" as const, href: investor.website ? investor.website : undefined, external: Boolean(investor.website) }
+  ];
+
   return (
-    <AppShell title={data.investor.name} subtitle="Detalle de la cuenta" canViewGlobal={user.can_view_global_dashboard}>
-      <div className="stack">
-        <div className="card">
-          <div className="row" style={{ marginBottom: 8 }}>
-            <h3 style={{ margin: 0 }}>Resumen</h3>
-            <div className="row" style={{ gap: 8 }}>
-              <Link href={`/acuerdos/new?investor_id=${encodeURIComponent(params.id)}`} className="companies-tab">Nuevo negocio</Link>
-              <Link href={`/actividades/new?investor_id=${encodeURIComponent(params.id)}`} className="companies-tab">Nueva actividad</Link>
+    <AppShell title={investor.name} subtitle="Ficha compacta de compañia" canViewGlobal={user.can_view_global_dashboard} showHeader={false}>
+      <div className="company-record-layout">
+        <aside className="company-record-aside stack">
+          <section className="company-record-primary card">
+            <div className="company-record-topbar">
+              <Link href="/investors" className="company-record-back">
+                <CrmIcon name="back" className="crm-icon" />
+                <span>Compañias</span>
+              </Link>
             </div>
-          </div>
-          <p><strong>Categoría:</strong> {data.investor.category}</p>
-          <p><strong>Estado:</strong> {data.investor.status_name ?? "-"}</p>
-          <p><strong>Web:</strong> {data.investor.website ?? "-"}</p>
-          <p><strong>Estrategia:</strong> {data.investor.strategy ?? "-"}</p>
-        </div>
 
-        <div className="card">
-          <h3>Contactos vinculados</h3>
-          <StaticTable
-            columns={["Nombre", "Email", "Estado"]}
-            rows={data.contacts.map((c) => [c.full_name, c.email ?? "-", c.status_name ?? "-"])}
-            emptyLabel="Sin contactos."
-          />
-        </div>
-
-        <div className="card">
-          <h3>Comentarios</h3>
-          <form action={addCommentAction} className="stack">
-            <textarea name="body" rows={4} placeholder="Añadir comentario..." />
-            <button type="submit">Guardar comentario</button>
-          </form>
-          <hr style={{ border: 0, borderTop: "1px solid #e5e7eb", margin: "12px 0" }} />
-          <div className="stack">
-            {data.comments.map((c) => (
-              <div key={c.id} className="card">
-                <div className="muted">{c.created_by_email} - {new Date(c.created_at).toLocaleString("es-ES")}</div>
-                <div>{c.body}</div>
+            <div className="company-record-hero">
+              <div className="company-record-avatar">{initials || "CO"}</div>
+              <div className="company-record-copy">
+                <h2>{investor.name}</h2>
+                <div className="company-record-links">
+                  {investor.website ? (
+                    <a href={investor.website} target="_blank" rel="noreferrer">{investor.website}</a>
+                  ) : (
+                    <span>Sin web</span>
+                  )}
+                  {investor.linkedin ? <a href={investor.linkedin} target="_blank" rel="noreferrer">LinkedIn</a> : null}
+                </div>
               </div>
-            ))}
-            {data.comments.length === 0 ? <div className="muted">Sin comentarios.</div> : null}
-          </div>
-        </div>
+            </div>
 
-        <div className="card">
-          <h3>Actividades relacionadas</h3>
-          <div className="stack">
-            {(activitiesRes.data ?? []).map((activity) => (
-              <p key={activity.id}>{activity.title ?? "(sin titulo)"} | {activity.activity_type ?? "--"} | {activity.occurred_at ? new Date(activity.occurred_at).toLocaleString("es-ES") : "--"}</p>
-            ))}
-            {(activitiesRes.data ?? []).length === 0 ? <p className="muted">Sin actividades relacionadas.</p> : null}
-          </div>
-        </div>
+            <div className="company-record-actions-grid">
+              <CompanyNotesDialog notes={notes} action={addNoteAction} />
+              {quickActions.map((action) =>
+                action.href ? (
+                  action.external ? (
+                    <a key={action.label} href={action.href} target="_blank" rel="noreferrer" className="company-record-action-pill">
+                      <span className="company-record-action-icon"><CrmIcon name={action.icon} className="crm-icon" /></span>
+                      <span>{action.label}</span>
+                    </a>
+                  ) : (
+                    <Link key={action.label} href={action.href} className="company-record-action-pill">
+                      <span className="company-record-action-icon"><CrmIcon name={action.icon} className="crm-icon" /></span>
+                      <span>{action.label}</span>
+                    </Link>
+                  )
+                ) : (
+                  <div key={action.label} className="company-record-action-pill company-record-action-pill-disabled">
+                    <span className="company-record-action-icon"><CrmIcon name={action.icon} className="crm-icon" /></span>
+                    <span>{action.label}</span>
+                  </div>
+                )
+              )}
+            </div>
+          </section>
 
-        <div className="card">
-          <h3>Auditoria de cambios</h3>
-          <div className="stack">
-            {(auditRes.data ?? []).map((row) => (
-              <p key={row.id} className="muted">{new Date(row.changed_at).toLocaleString("es-ES")} | {row.changed_by_email} | {row.action} | {row.field ?? "general"}: {row.old_value ?? "--"} {"->"} {row.new_value ?? "--"}</p>
-            ))}
-            {(auditRes.data ?? []).length === 0 ? <p className="muted">Sin cambios auditados.</p> : null}
-          </div>
-        </div>
+          <section className="company-record-info card">
+            <div className="company-record-section-head">
+              <div className="row" style={{ gap: 8, alignItems: "center" }}>
+                <CrmIcon name="chevron_down" className="crm-icon" />
+                <h3>Información clave</h3>
+              </div>
+              <div className="row" style={{ gap: 10, alignItems: "center" }}>
+                <button type="button" className="company-record-top-action">
+                  <span>Acciones</span>
+                  <CrmIcon name="chevron_down" className="crm-icon" />
+                </button>
+              </div>
+            </div>
+
+            <div className="company-record-info-list">
+              <div><span>Propietario del registro de compañía</span><strong>Sin propietario</strong></div>
+              <div><span>Estado</span><strong>{investor.status_name ?? investor.priority ?? "--"}</strong></div>
+              <div><span>Tipo</span><strong>{investor.tipo_fondo || investor.category || "--"}</strong></div>
+              <div><span>Último contacto</span><strong>{formatDateTime(lastTouch)}</strong></div>
+            </div>
+          </section>
+        </aside>
+
+        <CompanyDetailCenter
+          investorId={params.id}
+          defaults={defaults}
+          profile={{
+            city: investor.office || "--",
+            address: investor.address || "--",
+            zipCode: "--",
+            region: investor.mercados || "--",
+            country: "--",
+            sector: investor.sector || investor.category || "--"
+          }}
+          activities={activities.map((activity) => ({
+            id: String(activity.id),
+            title: activity.title ?? "(sin título)",
+            type: activity.activity_type ?? "--",
+            occurredAt: formatDateTime(activity.occurred_at),
+            body: activity.body ?? ""
+          }))}
+          completedDeals={completedDeals}
+          advanced={advancedItems}
+          action={updateInvestorAction}
+        />
+
+        <aside className="company-detail-side stack">
+          <details className="company-record-mini-panel" open>
+            <summary className="company-record-mini-summary">
+              <div className="company-record-mini-title">
+                <CrmIcon name="chevron_down" className="crm-icon" />
+                <span>Contactos ({contacts.length})</span>
+              </div>
+              <div className="company-record-mini-actions">
+                <details className="company-record-mini-menu">
+                  <summary className="company-record-mini-action">Agregar</summary>
+                  <div className="company-record-mini-menu-list">
+                    <Link href={`/contacts/new?investor_id=${encodeURIComponent(params.id)}`} className="company-record-mini-menu-item">Añadir un nuevo contacto</Link>
+                    <Link href={`/investors/${encodeURIComponent(params.id)}/contacts/link`} className="company-record-mini-menu-item">Agregar contacto existente</Link>
+                  </div>
+                </details>
+              </div>
+            </summary>
+            <div className="company-record-mini-body">
+              {contacts.length > 0 ? contacts.map((contact) => (
+                <Link key={contact.id} href={`/contacts/${encodeURIComponent(contact.id)}`} className="company-record-mini-item">
+                  <strong>{contact.full_name}</strong>
+                  <span>{contact.email ?? contact.status_name ?? "Sin datos"}</span>
+                </Link>
+              )) : <p className="muted">Sin contactos asociados.</p>}
+            </div>
+          </details>
+
+          <details className="company-record-mini-panel">
+            <summary className="company-record-mini-summary">
+              <div className="company-record-mini-title">
+                <CrmIcon name="chevron_down" className="crm-icon" />
+                <span>Negocios (0)</span>
+              </div>
+              <div className="company-record-mini-actions">
+                <span className="company-record-mini-action">Agregar</span>
+              </div>
+            </summary>
+            <div className="company-record-mini-body">
+              <p className="muted">Sin negocios asociados.</p>
+            </div>
+          </details>
+        </aside>
       </div>
     </AppShell>
   );
 }
+
+
+
+
 

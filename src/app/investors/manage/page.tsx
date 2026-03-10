@@ -1,4 +1,5 @@
-﻿import { revalidatePath } from "next/cache";
+import { revalidatePath } from "next/cache";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { StaticTable } from "@/components/ui/static-table";
@@ -10,7 +11,15 @@ type SearchProps = {
   searchParams?: {
     ok?: string;
     error?: string;
-    q?: string;
+    company?: string;
+    vertical?: string;
+    web?: string;
+    sede?: string;
+    size?: string;
+    priority?: string;
+    minInvestment?: string;
+    maxInvestment?: string;
+    comments?: string;
   };
 };
 
@@ -20,7 +29,17 @@ export default async function ManageInvestorsPage({ searchParams }: SearchProps)
     redirect("/forbidden");
   }
   const db = createSourceCrmServerClient();
-  const q = String(searchParams?.q ?? "").trim();
+  const filters = {
+    company: String(searchParams?.company ?? "").trim(),
+    vertical: String(searchParams?.vertical ?? "").trim(),
+    web: String(searchParams?.web ?? "").trim(),
+    sede: String(searchParams?.sede ?? "").trim(),
+    size: String(searchParams?.size ?? "").trim(),
+    priority: String(searchParams?.priority ?? "").trim(),
+    minInvestment: String(searchParams?.minInvestment ?? "").trim(),
+    maxInvestment: String(searchParams?.maxInvestment ?? "").trim(),
+    comments: String(searchParams?.comments ?? "").trim()
+  };
 
   async function updateInvestorsBulkAction(formData: FormData) {
     "use server";
@@ -60,73 +79,77 @@ export default async function ManageInvestorsPage({ searchParams }: SearchProps)
     redirect("/investors/manage?ok=1");
   }
 
-  let investorsQuery = await db
+  let investorsQuery = db
     .from("inversion")
     .select("company_id, compania, vertical, web, sede, tamano_empresa, prioridad, inversion_minima, inversion_maxima, comentarios, updated_at")
     .order("updated_at", { ascending: false })
     .limit(120);
 
-  if (q) {
-    const pattern = `%${q}%`;
-    investorsQuery = await db
-      .from("inversion")
-      .select("company_id, compania, vertical, web, sede, tamano_empresa, prioridad, inversion_minima, inversion_maxima, comentarios, updated_at")
-      .or(`compania.ilike.${pattern},vertical.ilike.${pattern},web.ilike.${pattern},sede.ilike.${pattern},tamano_empresa.ilike.${pattern},prioridad.ilike.${pattern},comentarios.ilike.${pattern}`)
-      .order("updated_at", { ascending: false })
-      .limit(120);
+  if (filters.company) {
+    investorsQuery = investorsQuery.ilike("compania", `%${filters.company}%`);
+  }
+  if (filters.vertical) {
+    investorsQuery = investorsQuery.ilike("vertical", `%${filters.vertical}%`);
+  }
+  if (filters.web) {
+    investorsQuery = investorsQuery.ilike("web", `%${filters.web}%`);
+  }
+  if (filters.sede) {
+    investorsQuery = investorsQuery.ilike("sede", `%${filters.sede}%`);
+  }
+  if (filters.size) {
+    investorsQuery = investorsQuery.ilike("tamano_empresa", `%${filters.size}%`);
+  }
+  if (filters.priority) {
+    investorsQuery = investorsQuery.ilike("prioridad", `%${filters.priority}%`);
+  }
+  if (filters.minInvestment) {
+    investorsQuery = investorsQuery.ilike("inversion_minima", `%${filters.minInvestment}%`);
+  }
+  if (filters.maxInvestment) {
+    investorsQuery = investorsQuery.ilike("inversion_maxima", `%${filters.maxInvestment}%`);
+  }
+  if (filters.comments) {
+    investorsQuery = investorsQuery.ilike("comentarios", `%${filters.comments}%`);
   }
 
-  const { data: investors } = investorsQuery;
+  const { data: investors } = await investorsQuery;
 
   return (
-    <AppShell title="Edici\u00f3n de cuentas" subtitle="Panel de ajuste masivo con el mismo lenguaje visual del CRM" canViewGlobal={user.can_view_global_dashboard}>
+    <AppShell title="Modificar compañia" subtitle="Edici\u00f3n masiva con el mismo estilo del CRM" canViewGlobal={user.can_view_global_dashboard}>
       <div className="editor-shell">
-        <section className="card editor-hero editor-hero-warm">
-          <div>
-            <p className="workspace-kicker">Cuentas</p>
-            <h2>Refina informaci\u00f3n clave sin salir de una sola superficie</h2>
-            <p className="muted">
-              Vertical, prioridad, tickets de inversi\u00f3n y comentarios conviven en una tabla con m\u00e1s jerarqu\u00eda visual, menos sensaci\u00f3n administrativa y mejor ritmo de lectura.
-            </p>
-          </div>
-          <div className="editor-hero-metrics">
-            <div className="editor-hero-metric">
-              <strong>{investors?.length ?? 0}</strong>
-              <span>cuentas visibles</span>
-            </div>
-          </div>
-        </section>
-
         {searchParams?.ok === "1" ? <div className="notice notice-success">Cambios guardados correctamente.</div> : null}
         {searchParams?.error ? <div className="notice notice-error">Error: {searchParams.error}</div> : null}
 
-        <section className="card editor-card">
-          <div className="table-card-head">
-            <div>
-              <p className="workspace-kicker">Filtrado</p>
-              <h3>Buscar bloque de cuentas</h3>
-              <p className="muted">Filtra antes de editar para trabajar con una selecci\u00f3n m\u00e1s limpia y enfocada.</p>
-            </div>
-          </div>
-          <form method="get" className="entity-toolbar form-toolbar-surface">
-            <input className="toolbar-search" name="q" defaultValue={q} placeholder="Buscar por compa\u00f1\u00eda, vertical, web o comentario" />
-            <button type="submit">Aplicar</button>
-            {q ? <a href="/investors/manage" className="contacts-tab">Limpiar</a> : null}
-          </form>
-        </section>
+        <form id="investors-manage-filters" method="get" className="editor-hidden-filter-form" />
 
         <section className="card editor-card">
           <form action={updateInvestorsBulkAction} className="editor-stack">
-            <div className="form-actions-bar">
+            <div className="form-actions-bar form-actions-bar-manage-contacts">
               <div>
                 <p className="workspace-kicker">Edici\u00f3n masiva</p>
                 <h3>Tabla editable</h3>
               </div>
-              <button type="submit">Guardar cambios</button>
+              <div className="table-filter-actions table-filter-actions-inline table-filter-actions-center">
+                <button type="submit" form="investors-manage-filters" className="button-outline-success">Aplicar filtros</button>
+                <Link href="/investors/manage" className="companies-tab">Limpiar</Link>
+              </div>
+              <button type="submit" className="button-outline-danger editor-save-button">Guardar cambios</button>
             </div>
 
             <StaticTable
-              columns={["Compa\u00f1\u00eda", "Vertical", "Web", "Sede", "Tama\u00f1o", "Prioridad", "Inv. m\u00ednima", "Inv. m\u00e1xima", "Comentarios"]}
+              columns={["Compañia", "Vertical", "Web", "Sede", "Tamaño", "Prioridad", "Inv. mínima", "Inv. máxima", "Comentarios"]}
+              headerFilters={[
+                <input key="filter-company" name="company" form="investors-manage-filters" defaultValue={filters.company} placeholder="Filtrar" />,
+                <input key="filter-vertical" name="vertical" form="investors-manage-filters" defaultValue={filters.vertical} placeholder="Filtrar" />,
+                <input key="filter-web" name="web" form="investors-manage-filters" defaultValue={filters.web} placeholder="Filtrar" />,
+                <input key="filter-sede" name="sede" form="investors-manage-filters" defaultValue={filters.sede} placeholder="Filtrar" />,
+                <input key="filter-size" name="size" form="investors-manage-filters" defaultValue={filters.size} placeholder="Filtrar" />,
+                <input key="filter-priority" name="priority" form="investors-manage-filters" defaultValue={filters.priority} placeholder="Filtrar" />,
+                <input key="filter-min-investment" name="minInvestment" form="investors-manage-filters" defaultValue={filters.minInvestment} placeholder="Filtrar" />,
+                <input key="filter-max-investment" name="maxInvestment" form="investors-manage-filters" defaultValue={filters.maxInvestment} placeholder="Filtrar" />,
+                <input key="filter-comments" name="comments" form="investors-manage-filters" defaultValue={filters.comments} placeholder="Filtrar" />
+              ]}
               rows={(investors ?? []).map((inv) => {
                 const id = String(inv.company_id);
                 return [
@@ -144,8 +167,8 @@ export default async function ManageInvestorsPage({ searchParams }: SearchProps)
                   <input name={`comentarios_${id}`} defaultValue={inv.comentarios ?? ""} />
                 ];
               })}
-              emptyLabel="Sin cuentas."
-              emptyHint="Ajusta la b\u00fasqueda o vuelve cuando haya cuentas disponibles para revisar."
+              emptyLabel="Sin compañias."
+              emptyHint="Ajusta los filtros de la cabecera o vuelve cuando haya compañias disponibles para revisar."
             />
           </form>
         </section>
@@ -153,3 +176,5 @@ export default async function ManageInvestorsPage({ searchParams }: SearchProps)
     </AppShell>
   );
 }
+
+

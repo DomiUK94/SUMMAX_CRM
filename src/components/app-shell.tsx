@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import Image from "next/image";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
@@ -55,16 +55,30 @@ function renderNavGroups(groups: NavGroup[]) {
   });
 }
 
+function LogoutButton({ mobile = false }: { mobile?: boolean }) {
+  return (
+    <form action="/auth/logout" method="post" className={mobile ? "sidebar-logout sidebar-logout-mobile" : "sidebar-logout"}>
+      <button type="submit" className="sidebar-logout-button">
+        <span className="nav-link-icon" aria-hidden="true">
+          <CrmIcon name="warning" className="crm-icon" />
+        </span>
+        <span>Salir</span>
+      </button>
+    </form>
+  );
+}
 export async function AppShell({
   title,
   subtitle,
   children,
-  canViewGlobal
+  canViewGlobal,
+  showHeader = true
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
   canViewGlobal: boolean;
+  showHeader?: boolean;
 }) {
   const auth = createSupabaseServerClient();
   const sourcecrm = createSourceCrmServerClient();
@@ -87,7 +101,7 @@ export async function AppShell({
       title: "Operativa",
       items: [
         { href: "/contacts", label: "Contactos", icon: "contacts" },
-        { href: "/investors", label: "Cuentas", icon: "companies" },
+        { href: "/investors", label: "Compañias", icon: "companies" },
         { href: "/actividades", label: "Actividades", icon: "activity" },
         { href: "/acuerdos", label: "Negocios", icon: "deals" },
         { href: "/search", label: "B\u00fasqueda global", icon: "search" }
@@ -128,28 +142,35 @@ export async function AppShell({
         </div>
 
         <nav className="sidebar-nav">{renderNavGroups(navGroups)}</nav>
+        <LogoutButton />
       </aside>
 
       <section className="workspace">
         <details className="mobile-nav card">
           <summary>Navegaci\u00f3n</summary>
-          <div className="mobile-nav-panel">{renderNavGroups(navGroups)}</div>
+          <div className="mobile-nav-panel">{renderNavGroups(navGroups)}<LogoutButton mobile /></div>
         </details>
-
-        <header className="workspace-header card">
-          <div className="workspace-header-copy">
-            <h1>{title}</h1>
-            {subtitle ? <p className="muted">{subtitle}</p> : null}
-          </div>
-          <div className="workspace-header-actions">
-            <WorkspaceQuickLinks />
-          </div>
-        </header>
+        {showHeader ? (
+          <header className="workspace-header card">
+            <div className="workspace-header-copy">
+              <h1>{title}</h1>
+              {subtitle ? <p className="muted">{subtitle}</p> : null}
+            </div>
+            <div className="workspace-header-actions">
+              <WorkspaceQuickLinks />
+            </div>
+          </header>
+        ) : null}
         <div>{children}</div>
       </section>
     </div>
   );
 }
+
+
+
+
+
 
 
 

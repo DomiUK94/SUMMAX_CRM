@@ -1,34 +1,47 @@
-﻿import Link from "next/link";
-import * as Tabs from "@radix-ui/react-tabs";
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { ContactDetailCenter } from "@/components/contact-detail-center";
+import { ContactProfileEditDialog } from "@/components/contact-profile-edit-dialog";
+import { CrmIcon } from "@/components/ui/crm-icon";
 import { requireUser } from "@/lib/auth/session";
-import { addComment, changeContactStatus, getContactById } from "@/lib/db/crm";
+import { addComment, changeContactStatus, getContactById, updateContactProfile } from "@/lib/db/crm";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
 const STATUS_OPTIONS = [
   "Pendiente de contactar",
   "En contacto",
   "NDA en curso",
-  "Revisión financiera",
-  "Interés confirmado",
+  "Revisi\u00f3n financiera",
+  "Inter\u00e9s confirmado",
   "Contrato en curso",
   "Cerrado",
   "Descartado"
 ];
 
-export default async function ContactDetailPage({ params }: { params: { id: string } }) {
+type PageProps = {
+  params: { id: string };
+  searchParams?: { ok?: string; error?: string };
+};
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("es-ES");
+}
+
+export default async function ContactDetailPage({ params, searchParams }: PageProps) {
   const user = await requireUser();
   const data = await getContactById(params.id);
   const db = createSourceCrmServerClient();
   const [tagLinksRes, allTagsRes, activitiesRes, dealsRes, auditRes] = await Promise.all([
     db.from("entity_tags").select("tag_id, tags(id, name, color)").eq("entity_type", "contact").eq("entity_id", params.id),
     db.from("tags").select("id, name, color").order("name", { ascending: true }),
-    db.from("activities").select("id, title, activity_type, occurred_at").eq("entity_type", "contact").eq("entity_id", Number(params.id)).order("occurred_at", { ascending: false }).limit(8),
+    db.from("activities").select("id, title, activity_type, occurred_at, body").eq("entity_type", "contact").eq("entity_id", Number(params.id)).order("occurred_at", { ascending: false }).limit(8),
     data.contact?.investor_id
       ? db.from("inversion").select("company_id, compania, prioridad, inversion_maxima, updated_at").eq("company_id", Number(data.contact.investor_id)).limit(5)
       : Promise.resolve({ data: [] }),
-    db.from("audit_log").select("id, field, old_value, new_value, action, changed_by_email, changed_at").eq("entity_type", "contact").eq("entity_id", params.id).order("changed_at", { ascending: false }).limit(20)
+    db.from("audit_log").select("id, field, old_value, new_value, action, changed_by_email, changed_at").eq("entity_type", "contact").eq("entity_id", params.id).order("changed_at", { ascending: false }).limit(12)
   ]);
 
   async function addCommentAction(formData: FormData) {
@@ -46,7 +59,7 @@ export default async function ContactDetailPage({ params }: { params: { id: stri
     });
 
     revalidatePath(`/contacts/${params.id}`);
-    revalidatePath("/dashboard/me");
+    redirect(`/contacts/${params.id}?ok=note`);
   }
 
   async function changeStatusAction(formData: FormData) {
@@ -67,9 +80,34 @@ export default async function ContactDetailPage({ params }: { params: { id: stri
     });
 
     revalidatePath(`/contacts/${params.id}`);
-    revalidatePath("/dashboard/me");
-    revalidatePath("/dashboard/general");
     revalidatePath("/contacts");
+    redirect(`/contacts/${params.id}?ok=status`);
+  }
+
+  async function updateContactAction(formData: FormData) {
+    "use server";
+    const actor = await requireUser();
+    try {
+      await updateContactProfile({
+        contact_id: params.id,
+        full_name: String(formData.get("full_name") ?? "").trim(),
+        email: String(formData.get("email") ?? "").trim() || undefined,
+        phone: String(formData.get("phone") ?? "").trim() || undefined,
+        role: String(formData.get("role") ?? "").trim() || undefined,
+        other_contact: String(formData.get("other_contact") ?? "").trim() || undefined,
+        linkedin: String(formData.get("linkedin") ?? "").trim() || undefined,
+        comments: String(formData.get("comments") ?? "").trim() || undefined,
+        status_name: String(formData.get("status_name") ?? "").trim() || undefined,
+        actor_user_id: actor.id,
+        actor_email: actor.email
+      });
+
+      revalidatePath(`/contacts/${params.id}`);
+      redirect(`/contacts/${params.id}?ok=profile`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudieron guardar los cambios";
+      redirect(`/contacts/${params.id}?error=${encodeURIComponent(message)}`);
+    }
   }
 
   if (!data.contact) {
@@ -80,247 +118,251 @@ export default async function ContactDetailPage({ params }: { params: { id: stri
     );
   }
 
-  const initials = data.contact.full_name
+  const contact = data.contact;
+  const activities = activitiesRes.data ?? [];
+  const deals = dealsRes.data ?? [];
+  const tags = tagLinksRes.data ?? [];
+  const auditRows = auditRes.data ?? [];
+  const comments = data.comments;
+  const initials = contact.full_name
     .split(" ")
     .filter(Boolean)
     .slice(0, 2)
     .map((part: string) => part[0]?.toUpperCase() ?? "")
     .join("");
 
-  const activities = activitiesRes.data ?? [];
-  const deals = dealsRes.data ?? [];
-  const tags = tagLinksRes.data ?? [];
-  const auditRows = auditRes.data ?? [];
-  const lastCommentAt = data.comments.length > 0 ? new Date(data.comments[0].created_at).toLocaleString("es-ES") : null;
+  const quickActions = [
+    { label: "Nota", icon: "report" as const, href: "#contact-notes" },
+    { label: "Correo", icon: "mail" as const, href: contact.email ? `mailto:${contact.email}` : undefined },
+    { label: "LinkedIn", icon: "linkedin" as const, href: contact.linkedin ? contact.linkedin : undefined },
+    { label: "Tarea", icon: "task" as const, href: `/actividades/new?contact_id=${encodeURIComponent(params.id)}${contact.investor_id ? `&investor_id=${encodeURIComponent(contact.investor_id)}` : ""}` },
+    { label: "Reuni\u00f3n", icon: "meeting" as const, href: `/actividades/new?contact_id=${encodeURIComponent(params.id)}${contact.investor_id ? `&investor_id=${encodeURIComponent(contact.investor_id)}` : ""}` },
+    { label: "M\u00e1s", icon: "more" as const, href: contact.investor_id ? `/investors/${encodeURIComponent(contact.investor_id)}` : undefined }
+  ];
+
+  const relatedCompanies = contact.investor_name
+    ? [{
+        id: String(contact.investor_id ?? "company"),
+        name: contact.investor_name,
+        href: contact.investor_id ? `/investors/${encodeURIComponent(contact.investor_id)}` : undefined,
+        detail: contact.role ?? "Compa\u00f1\u00eda vinculada"
+      }]
+    : [];
+
+  const attachments: Array<{ id: string; label: string; meta: string; href?: string }> = [];
+  const closedDeals = deals.filter((deal) => {
+    const signal = `${deal.prioridad ?? ""} ${deal.compania ?? ""}`.toLowerCase();
+    return signal.includes("cerrado") || signal.includes("ganado") || signal.includes("closed") || signal.includes("won");
+  });
+  const contactDefaults = {
+    full_name: contact.full_name,
+    status_name: contact.status_name ?? "",
+    email: contact.email ?? "",
+    phone: contact.phone ?? "",
+    role: contact.role ?? "",
+    other_contact: contact.other_contact ?? "",
+    linkedin: contact.linkedin ?? "",
+    comments: contact.comments ?? ""
+  };
 
   return (
-    <AppShell title="Contactos" subtitle="Ficha de contacto" canViewGlobal={user.can_view_global_dashboard}>
-      <div className="contact-detail-layout contact-detail-pro">
-        <aside className="contact-left card contact-pane contact-pane-1">
-          <Link href="/contacts" className="contact-back">
-            Contactos
-          </Link>
-
-          <div className="contact-head">
-            <div className="contact-avatar">{initials || "C"}</div>
-            <div>
-              <h2>{data.contact.full_name}</h2>
-              <p className="muted">{data.contact.investor_name ?? "Sin compañía"}</p>
-              <p>{data.contact.email ?? "Sin email"}</p>
+    <AppShell title={contact.full_name} subtitle="Ficha compacta de contacto" canViewGlobal={user.can_view_global_dashboard} showHeader={false}>
+      <div className="contact-record-layout">
+        <aside className="contact-record-aside stack">
+          <section className="contact-record-primary card">
+            <div className="contact-record-topbar">
+              <Link href="/contacts" className="contact-record-back">
+                <CrmIcon name="back" className="crm-icon" />
+                <span>Contactos</span>
+              </Link>
             </div>
-          </div>
 
-          <div className="contact-summary-grid">
-            <article className="contact-summary-card">
-              <strong>{activities.length}</strong>
-              <span>Actividades</span>
-            </article>
-            <article className="contact-summary-card">
-              <strong>{deals.length}</strong>
-              <span>Negocios</span>
-            </article>
-            <article className="contact-summary-card">
-              <strong>{tags.length}</strong>
-              <span>Etiquetas</span>
-            </article>
-            <article className="contact-summary-card">
-              <strong>{auditRows.length}</strong>
-              <span>Cambios</span>
-            </article>
-          </div>
+            <div className="contact-record-hero">
+              <div className="contact-record-avatar">{initials || "CT"}</div>
+              <div className="contact-record-copy">
+                <h2>{contact.full_name}</h2>
+                <p>{contact.role ?? "Sin rol definido"}</p>
+                <div className="contact-record-links">
+                  <span>{contact.email ?? "Sin email"}</span>
+                  {contact.linkedin ? <a href={contact.linkedin} target="_blank" rel="noreferrer">LinkedIn</a> : null}
+                </div>
+              </div>
+            </div>
 
-          <div className="contact-quick-actions">
-            <Link
-              href={`/acuerdos/new?contact_id=${encodeURIComponent(params.id)}${data.contact.investor_id ? `&investor_id=${encodeURIComponent(data.contact.investor_id)}` : ""}`}
-              className="quick-action"
-            >
-              Nuevo negocio
-            </Link>
-            <Link
-              href={`/actividades/new?contact_id=${encodeURIComponent(params.id)}${data.contact.investor_id ? `&investor_id=${encodeURIComponent(data.contact.investor_id)}` : ""}`}
-              className="quick-action"
-            >
-              Nueva actividad
-            </Link>
-          </div>
+            <div className="contact-record-actions-grid">
+              {quickActions.map((action) =>
+                action.href ? (
+                  <Link key={action.label} href={action.href} className="contact-record-action-pill">
+                    <span className="contact-record-action-icon"><CrmIcon name={action.icon} className="crm-icon" /></span>
+                    <span>{action.label}</span>
+                  </Link>
+                ) : (
+                  <div key={action.label} className="contact-record-action-pill contact-record-action-pill-disabled">
+                    <span className="contact-record-action-icon"><CrmIcon name={action.icon} className="crm-icon" /></span>
+                    <span>{action.label}</span>
+                  </div>
+                )
+              )}
+            </div>
+          </section>
 
-          <div className="contact-meta-list stack">
-            <h3>Información clave</h3>
-            <div className="contact-meta-row"><span>Correo</span><strong>{data.contact.email ?? "-"}</strong></div>
-            <div className="contact-meta-row"><span>Teléfono</span><strong>{data.contact.phone ?? "-"}</strong></div>
-            <div className="contact-meta-row"><span>Compañía</span><strong>{data.contact.investor_name ?? "-"}</strong></div>
-            <div className="contact-meta-row"><span>Estado</span><strong>{data.contact.status_name ?? "-"}</strong></div>
-            <div className="contact-meta-row"><span>Última nota</span><strong>{lastCommentAt ?? "Sin actividad"}</strong></div>
-          </div>
+          <section className="contact-record-info card">
+            <div className="contact-record-section-head">
+              <div className="row" style={{ gap: 8, alignItems: "center" }}>
+                <CrmIcon name="chevron_down" className="crm-icon" />
+                <h3>{"Informaci\u00f3n clave"}</h3>
+              </div>
+              <div className="row" style={{ gap: 10, alignItems: "center" }}>
+                <ContactProfileEditDialog action={updateContactAction} defaults={contactDefaults} />
+              </div>
+            </div>
+
+            <div className="contact-record-info-list">
+              <div><span>Correo</span><strong>{contact.email ?? "-"}</strong></div>
+              <div><span>{"N\u00famero de tel\u00e9fono"}</span><strong>{contact.phone ?? "-"}</strong></div>
+              <div><span>Nombre de la empresa</span><strong>{contact.investor_name ?? "-"}</strong></div>
+              <div><span>Estado del lead</span><strong>{contact.status_name ?? "-"}</strong></div>
+              <div><span>Otro contacto</span><strong>{contact.other_contact ?? "-"}</strong></div>
+              <div><span>Propietario del contacto</span><strong>{contact.owner_email ?? "Sin propietario"}</strong></div>
+            </div>
+          </section>
         </aside>
 
-        <section className="contact-center contact-pane contact-pane-2">
-          <Tabs.Root defaultValue="overview" className="contact-radix-tabs">
-            <Tabs.List className="card contact-tabs contact-surface" aria-label="Secciones del contacto">
-              <Tabs.Trigger value="overview" className="contact-tab">Resumen</Tabs.Trigger>
-              <Tabs.Trigger value="activity" className="contact-tab">Seguimiento</Tabs.Trigger>
-              <Tabs.Trigger value="notes" className="contact-tab">Notas</Tabs.Trigger>
-              <Tabs.Trigger value="advanced" className="contact-tab">Auditoría</Tabs.Trigger>
-            </Tabs.List>
+        <ContactDetailCenter
+          defaults={contactDefaults}
+          info={{
+            name: contact.full_name,
+            status: contact.status_name ?? "--",
+            email: contact.email ?? "--",
+            phone: contact.phone ?? "--",
+            role: contact.role ?? "--",
+            otherContact: contact.other_contact ?? "--",
+            linkedin: contact.linkedin ?? "--",
+            comments: contact.comments ?? "--"
+          }}
+          closedDeals={closedDeals.map((deal) => ({
+            id: String(deal.company_id),
+            name: deal.compania ?? "--",
+            priority: deal.prioridad ?? "--",
+            amount: deal.inversion_maxima ?? "--"
+          }))}
+          comments={comments.map((comment) => ({
+            id: comment.id,
+            createdBy: comment.created_by_email ?? "-",
+            createdAt: formatDateTime(comment.created_at),
+            body: comment.body
+          }))}
+          activities={activities.map((activity) => ({
+            id: String(activity.id),
+            title: activity.title ?? "(sin t?tulo)",
+            type: activity.activity_type ?? "--",
+            occurredAt: formatDateTime(activity.occurred_at),
+            body: activity.body ?? ""
+          }))}
+          auditRows={auditRows.map((row) => ({
+            id: String(row.id),
+            field: row.field ?? "general",
+            changedAt: formatDateTime(row.changed_at),
+            changedBy: row.changed_by_email ?? "-",
+            oldValue: row.old_value ?? "--",
+            newValue: row.new_value ?? "--"
+          }))}
+          advanced={{
+            company: contact.investor_name ?? "--",
+            owner: contact.owner_email ?? "Sin propietario",
+            linkedin: contact.linkedin ?? "--",
+            comments: contact.comments ?? "--",
+            tags: tags.length > 0 ? tags.map((row) => ((row.tags as { name?: string } | null)?.name ?? "Tag")).join(", ") : "--",
+            lastActivity: activities[0]?.occurred_at ? formatDateTime(activities[0].occurred_at) : "--"
+          }}
+          updateAction={updateContactAction}
+          changeStatusAction={changeStatusAction}
+          addCommentAction={addCommentAction}
+        />
 
-            <Tabs.Content value="overview" className="contact-tab-panel stack">
-              <div className="card contact-surface contact-hero-card">
-                <div>
-                  <p className="workspace-kicker">Resumen</p>
-                  <h3>Vista operativa del contacto</h3>
-                  <p className="muted">
-                    {lastCommentAt
-                      ? `Última interacción registrada el ${lastCommentAt}.`
-                      : "Aún no hay comentarios o actividad manual registrada para este contacto."}
-                  </p>
+        <aside className="contact-record-right stack">
+          <details className="contact-record-mini-panel" open>
+            <summary className="contact-record-mini-summary">
+              <div className="contact-record-mini-title">
+                <CrmIcon name="chevron_down" className="crm-icon" />
+                <span>Empresas ({relatedCompanies.length})</span>
+              </div>
+              <details className="contact-record-mini-menu">
+                <summary className="contact-record-mini-action">Agregar</summary>
+                <div className="contact-record-mini-menu-list">
+                  <Link href="/investors/new" className="contact-record-mini-menu-item">Agregar nueva empresa</Link>
+                  <Link href="/investors" className="contact-record-mini-menu-item">Agregar existente</Link>
                 </div>
-                <div className="contact-inline-chips">
-                  <span className="contact-inline-chip">{data.contact.status_name ?? "Sin estado"}</span>
-                  <span className="contact-inline-chip contact-inline-chip-soft">{data.contact.investor_name ?? "Sin cuenta"}</span>
-                </div>
-              </div>
-
-              <div className="card contact-surface">
-                <h3>Última actividad registrada</h3>
-                <div className="contact-comment-list">
-                  {data.comments.slice(0, 4).map((c) => (
-                    <article key={c.id} className="contact-comment-item">
-                      <div className="muted">
-                        {c.created_by_email} · {new Date(c.created_at).toLocaleString("es-ES")}
-                      </div>
-                      <p>{c.body}</p>
-                    </article>
-                  ))}
-                  {data.comments.length === 0 ? <div className="muted">Sin comentarios todavía.</div> : null}
-                </div>
-              </div>
-            </Tabs.Content>
-
-            <Tabs.Content value="activity" className="contact-tab-panel stack">
-              <div className="card contact-surface">
-                <h3>Actualizar estado y próxima acción</h3>
-                <form action={changeStatusAction} className="stack">
-                  <select name="to_status_name" defaultValue={data.contact.status_name ?? "Pendiente de contactar"}>
-                    {STATUS_OPTIONS.map((status) => (
-                      <option key={status} value={status}>
-                        {status}
-                      </option>
-                    ))}
-                  </select>
-                  <input type="date" name="follow_up_date" required />
-                  <textarea name="note" rows={3} placeholder="Describe el siguiente paso o actualización" />
-                  <button type="submit">Guardar actualización</button>
-                </form>
-              </div>
-            </Tabs.Content>
-
-            <Tabs.Content value="notes" className="contact-tab-panel stack">
-              <div className="card contact-surface">
-                <h3>Nueva nota</h3>
-                <form action={addCommentAction} className="stack">
-                  <textarea name="body" rows={4} placeholder="Añadir comentario..." />
-                  <button type="submit">Guardar nota</button>
-                </form>
-              </div>
-            </Tabs.Content>
-
-            <Tabs.Content value="advanced" className="contact-tab-panel stack">
-              <div className="card contact-surface">
-                <h3>Auditoría de cambios</h3>
-                <div className="stack">
-                  {auditRows.map((row) => (
-                    <div key={row.id} className="contact-audit-item">
-                      <strong>{row.field ?? "general"}</strong>
-                      <p className="muted">{new Date(row.changed_at).toLocaleString("es-ES")} · {row.changed_by_email} · {row.action}</p>
-                      <p>{row.old_value ?? "--"} {"->"} {row.new_value ?? "--"}</p>
-                    </div>
-                  ))}
-                  {auditRows.length === 0 ? <p className="muted">Sin cambios auditados.</p> : null}
-                </div>
-              </div>
-            </Tabs.Content>
-          </Tabs.Root>
-        </section>
-
-        <aside className="contact-right contact-pane contact-pane-3">
-          <div className="card contact-surface contact-side-card">
-            <div className="row">
-              <h3 style={{ margin: 0 }}>Empresa</h3>
-              <Link href="/investors" className="quick-link-add">
-                Ver cuentas
-              </Link>
+              </details>
+            </summary>
+            <div className="contact-record-mini-body">
+              {relatedCompanies.length > 0 ? relatedCompanies.map((company) => (
+                company.href ? (
+                  <Link key={company.id} href={company.href} className="contact-record-mini-item">
+                    <strong>{company.name}</strong>
+                    <span>{company.detail}</span>
+                  </Link>
+                ) : (
+                  <div key={company.id} className="contact-record-mini-item">
+                    <strong>{company.name}</strong>
+                    <span>{company.detail}</span>
+                  </div>
+                )
+              )) : <p className="muted">Sin empresas asociadas.</p>}
             </div>
-            <p>{data.contact.investor_name ?? "Sin empresa asociada"}</p>
-          </div>
+          </details>
 
-          <div className="card contact-surface contact-side-card">
-            <div className="row">
-              <h3 style={{ margin: 0 }}>Negocios</h3>
-              <Link
-                href={`/acuerdos/new?contact_id=${encodeURIComponent(params.id)}${data.contact.investor_id ? `&investor_id=${encodeURIComponent(data.contact.investor_id)}` : ""}`}
-                className="quick-link-add"
-              >
-                Agregar
-              </Link>
-            </div>
-            <p className="muted">Asocia un negocio para esta cuenta desde aquí.</p>
-            <div className="contact-side-list stack">
-              {deals.map((deal) => (
-                <div key={deal.company_id} className="contact-side-item">
+          <details className="contact-record-mini-panel" open>
+            <summary className="contact-record-mini-summary">
+              <div className="contact-record-mini-title">
+                <CrmIcon name="chevron_down" className="crm-icon" />
+                <span>Negocios ({deals.length})</span>
+              </div>
+              <details className="contact-record-mini-menu">
+                <summary className="contact-record-mini-action">Agregar</summary>
+                <div className="contact-record-mini-menu-list">
+                  <Link href={contact.investor_id ? `/acuerdos/new?investor_id=${encodeURIComponent(contact.investor_id)}&contact_id=${encodeURIComponent(params.id)}` : `/acuerdos/new?contact_id=${encodeURIComponent(params.id)}`} className="contact-record-mini-menu-item">Agregar nuevo</Link>
+                  <Link href="/acuerdos" className="contact-record-mini-menu-item">Agregar existente</Link>
+                </div>
+              </details>
+            </summary>
+            <div className="contact-record-mini-body">
+              {deals.length > 0 ? deals.map((deal) => (
+                <div key={deal.company_id} className="contact-record-mini-item">
                   <strong>{deal.compania}</strong>
-                  <span>{deal.prioridad ?? "--"}</span>
-                  <span>{deal.inversion_maxima ?? "--"}</span>
+                  <span>{deal.prioridad ?? "Sin prioridad"} | {deal.inversion_maxima ?? "Sin ticket"}</span>
                 </div>
-              ))}
-              {deals.length === 0 ? <p className="muted">Sin negocios asociados.</p> : null}
+              )) : <p className="muted">Sin negocios asociados.</p>}
             </div>
-          </div>
+          </details>
 
-          <div className="card contact-surface contact-side-card">
-            <div className="row">
-              <h3 style={{ margin: 0 }}>Etiquetas</h3>
-              <form action="/api/tags/link" method="post" className="row" style={{ gap: 6 }}>
-                <input type="hidden" name="entity_type" value="contact" />
-                <input type="hidden" name="entity_id" value={params.id} />
-                <select name="tag_id">
-                  {(allTagsRes.data ?? []).map((tag) => (
-                    <option key={tag.id} value={tag.id}>
-                      {tag.name}
-                    </option>
-                  ))}
-                </select>
-                <button type="submit">Agregar</button>
-              </form>
+          <details className="contact-record-mini-panel">
+            <summary className="contact-record-mini-summary">
+              <div className="contact-record-mini-title">
+                <CrmIcon name="chevron_down" className="crm-icon" />
+                <span>Archivos adjuntos ({attachments.length})</span>
+              </div>
+              <span className="contact-record-mini-action">Agregar</span>
+            </summary>
+            <div className="contact-record-mini-body">
+              {attachments.length > 0 ? attachments.map((file) => (
+                file.href ? (
+                  <Link key={file.id} href={file.href} className="contact-record-mini-item">
+                    <strong>{file.label}</strong>
+                    <span>{file.meta}</span>
+                  </Link>
+                ) : (
+                  <div key={file.id} className="contact-record-mini-item">
+                    <strong>{file.label}</strong>
+                    <span>{file.meta}</span>
+                  </div>
+                )
+              )) : <p className="muted">Sin archivos adjuntos.</p>}
             </div>
-            <div className="row" style={{ flexWrap: "wrap", gap: 8 }}>
-              {tags.map((row) => (
-                <span
-                  key={row.tag_id}
-                  className="contact-tag"
-                  style={{ background: String((row.tags as { color?: string } | null)?.color ?? "#0f97af") }}
-                >
-                  {(row.tags as { name?: string } | null)?.name ?? "Tag"}
-                </span>
-              ))}
-              {tags.length === 0 ? <p className="muted">Sin etiquetas todavía.</p> : null}
-            </div>
-          </div>
-
-          <div className="card contact-surface contact-side-card">
-            <h3 style={{ marginTop: 0 }}>Actividades relacionadas</h3>
-            <div className="contact-side-list stack">
-              {activities.map((activity) => (
-                <div key={activity.id} className="contact-side-item">
-                  <strong>{activity.title ?? "(sin título)"}</strong>
-                  <span>{activity.activity_type ?? "--"}</span>
-                  <span>{activity.occurred_at ? new Date(activity.occurred_at).toLocaleString("es-ES") : "--"}</span>
-                </div>
-              ))}
-              {activities.length === 0 ? <p className="muted">Sin actividades relacionadas.</p> : null}
-            </div>
-          </div>
+          </details>
         </aside>
       </div>
     </AppShell>
   );
 }
+
