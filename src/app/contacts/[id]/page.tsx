@@ -3,22 +3,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { ContactDetailCenter } from "@/components/contact-detail-center";
+import { EntityFilesPanel } from "@/components/entity-files-panel";
 import { ContactProfileEditDialog } from "@/components/contact-profile-edit-dialog";
 import { CrmIcon } from "@/components/ui/crm-icon";
 import { requireUser } from "@/lib/auth/session";
 import { addComment, changeContactStatus, getContactById, updateContactProfile } from "@/lib/db/crm";
+import { deleteEntityFile, listEntityFilesWithUrls, normalizeEntityFileError, uploadEntityFile } from "@/lib/db/entity-files";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
-const STATUS_OPTIONS = [
-  "Pendiente de contactar",
-  "En contacto",
-  "NDA en curso",
-  "Revisi\u00f3n financiera",
-  "Inter\u00e9s confirmado",
-  "Contrato en curso",
-  "Cerrado",
-  "Descartado"
-];
 
 type PageProps = {
   params: { id: string };
@@ -34,9 +26,8 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
   const user = await requireUser();
   const data = await getContactById(params.id);
   const db = createSourceCrmServerClient();
-  const [tagLinksRes, allTagsRes, activitiesRes, dealsRes, auditRes] = await Promise.all([
+  const [tagLinksRes, activitiesRes, dealsRes, auditRes] = await Promise.all([
     db.from("entity_tags").select("tag_id, tags(id, name, color)").eq("entity_type", "contact").eq("entity_id", params.id),
-    db.from("tags").select("id, name, color").order("name", { ascending: true }),
     db.from("activities").select("id, title, activity_type, occurred_at, body").eq("entity_type", "contact").eq("entity_id", Number(params.id)).order("occurred_at", { ascending: false }).limit(8),
     data.contact?.investor_id
       ? db.from("inversion").select("company_id, compania, prioridad, inversion_maxima, updated_at").eq("company_id", Number(data.contact.investor_id)).limit(5)
@@ -110,6 +101,57 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
     }
   }
 
+  async function uploadFileAction(formData: FormData) {
+    "use server";
+    const actor = await requireUser();
+    const file = formData.get("file");
+
+    if (!(file instanceof File) || file.size === 0) {
+      redirect(`/contacts/${params.id}?error=file_missing`);
+    }
+
+    try {
+      await uploadEntityFile({
+        entityType: "contact",
+        entityId: params.id,
+        file,
+        actorUserId: actor.id,
+        actorEmail: actor.email
+      });
+    } catch (error) {
+      redirect(`/contacts/${params.id}?error=${normalizeEntityFileError(error)}`);
+    }
+
+    revalidatePath(`/contacts/${params.id}`);
+    redirect(`/contacts/${params.id}?ok=file_uploaded`);
+  }
+
+  async function deleteFileAction(formData: FormData) {
+    "use server";
+    const actor = await requireUser();
+    const fileId = String(formData.get("file_id") ?? "").trim();
+
+    if (!fileId) {
+      redirect(`/contacts/${params.id}?error=file_not_found`);
+    }
+
+    try {
+      await deleteEntityFile({
+        entityType: "contact",
+        entityId: params.id,
+        fileId,
+        actorUserId: actor.id,
+        actorEmail: actor.email
+      });
+    } catch (error) {
+      const code = normalizeEntityFileError(error) === "file_not_found" ? "file_not_found" : "file_delete_failed";
+      redirect(`/contacts/${params.id}?error=${code}`);
+    }
+
+    revalidatePath(`/contacts/${params.id}`);
+    redirect(`/contacts/${params.id}?ok=file_deleted`);
+  }
+
   if (!data.contact) {
     return (
       <AppShell title="Contacto" canViewGlobal={user.can_view_global_dashboard}>
@@ -124,6 +166,7 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
   const tags = tagLinksRes.data ?? [];
   const auditRows = auditRes.data ?? [];
   const comments = data.comments;
+  const attachments = await listEntityFilesWithUrls("contact", params.id);
   const initials = contact.full_name
     .split(" ")
     .filter(Boolean)
@@ -136,7 +179,7 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
     { label: "Correo", icon: "mail" as const, href: contact.email ? `mailto:${contact.email}` : undefined },
     { label: "LinkedIn", icon: "linkedin" as const, href: contact.linkedin ? contact.linkedin : undefined },
     { label: "Tarea", icon: "task" as const, href: `/actividades/new?contact_id=${encodeURIComponent(params.id)}${contact.investor_id ? `&investor_id=${encodeURIComponent(contact.investor_id)}` : ""}` },
-    { label: "M\u00e1s", icon: "more" as const, href: contact.investor_id ? `/investors/${encodeURIComponent(contact.investor_id)}` : undefined }
+    { label: "Mas", icon: "more" as const, href: contact.investor_id ? `/investors/${encodeURIComponent(contact.investor_id)}` : undefined }
   ];
 
   const relatedCompanies = contact.investor_name
@@ -144,15 +187,15 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
         id: String(contact.investor_id ?? "company"),
         name: contact.investor_name,
         href: contact.investor_id ? `/investors/${encodeURIComponent(contact.investor_id)}` : undefined,
-        detail: contact.role ?? "Compa\u00f1\u00eda vinculada"
+        detail: contact.role ?? "Compania vinculada"
       }]
     : [];
 
-  const attachments: Array<{ id: string; label: string; meta: string; href?: string }> = [];
   const closedDeals = deals.filter((deal) => {
     const signal = `${deal.prioridad ?? ""} ${deal.compania ?? ""}`.toLowerCase();
     return signal.includes("cerrado") || signal.includes("ganado") || signal.includes("closed") || signal.includes("won");
   });
+
   const contactDefaults = {
     full_name: contact.full_name,
     status_name: contact.status_name ?? "",
@@ -208,7 +251,7 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
             <div className="contact-record-section-head">
               <div className="row" style={{ gap: 8, alignItems: "center" }}>
                 <CrmIcon name="chevron_down" className="crm-icon" />
-                <h3>{"Informaci\u00f3n clave"}</h3>
+                <h3>Informacion clave</h3>
               </div>
               <div className="row" style={{ gap: 10, alignItems: "center" }}>
                 <ContactProfileEditDialog action={updateContactAction} defaults={contactDefaults} iconOnly />
@@ -217,7 +260,7 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
 
             <div className="contact-record-info-list">
               <div><span>Correo</span><strong>{contact.email ?? "-"}</strong></div>
-              <div><span>{"N\u00famero de tel\u00e9fono"}</span><strong>{contact.phone ?? "-"}</strong></div>
+              <div><span>Numero de telefono</span><strong>{contact.phone ?? "-"}</strong></div>
               <div><span>Nombre de la empresa</span><strong>{contact.investor_name ?? "-"}</strong></div>
               <div><span>Estado del lead</span><strong>{contact.status_name ?? "-"}</strong></div>
               <div><span>Otro contacto</span><strong>{contact.other_contact ?? "-"}</strong></div>
@@ -252,7 +295,7 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
           }))}
           activities={activities.map((activity) => ({
             id: String(activity.id),
-            title: activity.title ?? "(sin t?tulo)",
+            title: activity.title ?? "(sin titulo)",
             type: activity.activity_type ?? "--",
             occurredAt: formatDateTime(activity.occurred_at),
             body: activity.body ?? ""
@@ -334,33 +377,17 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
             </div>
           </details>
 
-          <details className="contact-record-mini-panel">
-            <summary className="contact-record-mini-summary">
-              <div className="contact-record-mini-title">
-                <CrmIcon name="chevron_down" className="crm-icon" />
-                <span>Archivos adjuntos ({attachments.length})</span>
-              </div>
-              <span className="contact-record-mini-action">Agregar</span>
-            </summary>
-            <div className="contact-record-mini-body">
-              {attachments.length > 0 ? attachments.map((file) => (
-                file.href ? (
-                  <Link key={file.id} href={file.href} className="contact-record-mini-item">
-                    <strong>{file.label}</strong>
-                    <span>{file.meta}</span>
-                  </Link>
-                ) : (
-                  <div key={file.id} className="contact-record-mini-item">
-                    <strong>{file.label}</strong>
-                    <span>{file.meta}</span>
-                  </div>
-                )
-              )) : <p className="muted">Sin archivos adjuntos.</p>}
-            </div>
-          </details>
+          <EntityFilesPanel
+            theme="contact"
+            entityType="contact"
+            entityId={params.id}
+            files={attachments}
+            uploadAction={uploadFileAction}
+            deleteAction={deleteFileAction}
+            searchParams={searchParams}
+          />
         </aside>
       </div>
     </AppShell>
   );
 }
-

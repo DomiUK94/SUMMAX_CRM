@@ -1,4 +1,4 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
@@ -8,8 +8,15 @@ import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 type SearchProps = {
   searchParams?: {
     view?: string;
+    panel?: string;
     ok?: string;
     error?: string;
+    filter_type?: string;
+    filter_content?: string;
+    filter_status?: string;
+    filter_latest?: string;
+    filter_assignee?: string;
+    filter_date?: string;
   };
 };
 
@@ -45,6 +52,11 @@ const TYPE_OPTIONS = ["sugerencia", "bug", "nota"] as const;
 const CLOSED_STATUS = ["resuelta", "descartada"] as const;
 
 type ViewMode = "mine" | "team" | "closed";
+type PanelMode = "tracking" | "new";
+
+function normalizePanel(value: string | undefined): PanelMode {
+  return value === "new" ? "new" : "tracking";
+}
 
 function normalizeView(value: string | undefined, isAdmin: boolean): ViewMode {
   if (value === "mine" || value === "team" || value === "closed") {
@@ -88,7 +100,14 @@ export default async function SugerenciasPage({ searchParams }: SearchProps) {
   const db = createSourceCrmServerClient();
   const isAdmin = user.role === "admin";
   const view = normalizeView(searchParams?.view, isAdmin);
+  const panel = normalizePanel(searchParams?.panel);
   const mineFilter = `created_by_user_id.eq.${user.id},assigned_to_user_id.eq.${user.id}`;
+  const filterType = String(searchParams?.filter_type ?? "").trim().toLowerCase();
+  const filterContent = String(searchParams?.filter_content ?? "").trim().toLowerCase();
+  const filterStatus = String(searchParams?.filter_status ?? "").trim().toLowerCase();
+  const filterLatest = String(searchParams?.filter_latest ?? "").trim().toLowerCase();
+  const filterAssignee = String(searchParams?.filter_assignee ?? "").trim().toLowerCase();
+  const filterDate = String(searchParams?.filter_date ?? "").trim();
 
   async function createEntryAction(formData: FormData) {
     "use server";
@@ -132,7 +151,8 @@ export default async function SugerenciasPage({ searchParams }: SearchProps) {
       .single();
 
     if (created.error || !created.data) {
-      redirect(withResult("/sugerencias", "error", "create_failed"));
+      const message = created.error?.message ?? "create_failed";
+      redirect(withResult("/sugerencias", "error", message));
     }
 
     await source.from("suggestion_events").insert({
@@ -187,141 +207,185 @@ export default async function SugerenciasPage({ searchParams }: SearchProps) {
     eventsBySuggestion.set(event.suggestion_id, group);
   }
 
+  const suggestionTableRows = suggestions.map((item) => {
+    const summary = splitSuggestionText(item.suggestion_text);
+    const threadEvents = eventsBySuggestion.get(item.id) ?? [];
+    const lastMessage = threadEvents[0];
+    const preview = summary.body || summary.subject;
+    const latestStatus = lastMessage?.body ?? item.status ?? "-";
+    const latestStatusAt = lastMessage?.created_at ?? item.updated_at;
+    const typeText = typeLabel(item.suggestion_type);
+    const statusText = item.status ?? "-";
+    const assigneeText = item.assigned_to_email ?? "Sin responsable";
+
+    return {
+      item,
+      preview,
+      latestStatus,
+      latestStatusAt,
+      typeText,
+      statusText,
+      assigneeText
+    };
+  });
+
+  const filteredSuggestionRows = suggestionTableRows.filter((row) => {
+    const matchesType = !filterType || row.typeText.toLowerCase().includes(filterType);
+    const matchesContent = !filterContent || row.preview.toLowerCase().includes(filterContent);
+    const matchesStatus = !filterStatus || row.statusText.toLowerCase().includes(filterStatus);
+    const matchesLatest = !filterLatest || row.latestStatus.toLowerCase().includes(filterLatest);
+    const matchesAssignee = !filterAssignee || row.assigneeText.toLowerCase().includes(filterAssignee);
+    const matchesDate = !filterDate || (row.latestStatusAt ? row.latestStatusAt.slice(0, 10) === filterDate : false);
+    return matchesType && matchesContent && matchesStatus && matchesLatest && matchesAssignee && matchesDate;
+  });
+
   const openItems = suggestions.filter((item) => !CLOSED_STATUS.includes(item.status as (typeof CLOSED_STATUS)[number]));
   const closedItems = suggestions.filter((item) => CLOSED_STATUS.includes(item.status as (typeof CLOSED_STATUS)[number]));
   const bugsCount = suggestions.filter((item) => item.suggestion_type === "bug").length;
 
   return (
     <AppShell title="Sugerencias y bugs" subtitle="Canal interno compacto para notas, bugs y propuestas" canViewGlobal={user.can_view_global_dashboard}>
-      <div className="feedback-layout">
+      <div className="feedback-layout feedback-layout-single">
         <section className="feedback-main stack">
-          <article className="card feedback-hero-card">
-            <div className="feedback-hero-top">
-              <div>
-                <p className="workspace-kicker">Canal interno</p>
-                <h2>Bandeja de seguimiento del equipo</h2>
-                <p className="muted">Centraliza sugerencias, bugs y notas con responsable, mensajes internos y cambios de estado en una sola vista.</p>
-              </div>
-              <div className="feedback-view-tabs">
-                <Link href="/sugerencias?view=mine" className={view === "mine" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>Mis abiertas</Link>
-                {isAdmin ? <Link href="/sugerencias?view=team" className={view === "team" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>Equipo</Link> : null}
-                <Link href="/sugerencias?view=closed" className={view === "closed" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>Cerradas</Link>
-              </div>
-            </div>
-
-            <div className="feedback-metrics-grid">
-              <article className="feedback-metric-card">
-                <strong>{openItems.length}</strong>
-                <span>Abiertas</span>
-              </article>
-              <article className="feedback-metric-card">
-                <strong>{bugsCount}</strong>
-                <span>Bugs</span>
-              </article>
-              <article className="feedback-metric-card">
-                <strong>{closedItems.length}</strong>
-                <span>Cerradas</span>
-              </article>
-            </div>
-          </article>
+          <div className="feedback-top-actions">
+            <Link href="/sugerencias?panel=tracking" className={panel === "tracking" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>
+              Seguimiento de tickets existentes
+            </Link>
+            <Link href="/sugerencias?panel=new" className={panel === "new" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>
+              Añadir nuevo ticket
+            </Link>
+          </div>
 
           {searchParams?.ok === "created" ? <div className="notice notice-success">Entrada creada.</div> : null}
           {searchParams?.error === "missing_fields" ? <div className="notice notice-error">Completa asunto y mensaje.</div> : null}
-          {searchParams?.error === "invalid_assignee" ? <div className="notice notice-error">Responsable no válido.</div> : null}
-          {searchParams?.error === "create_failed" ? <div className="notice notice-error">No se pudo crear la entrada.</div> : null}
+          {searchParams?.error === "invalid_assignee" ? <div className="notice notice-error">Responsable no valido.</div> : null}
+          {searchParams?.error && searchParams.error !== "missing_fields" && searchParams.error !== "invalid_assignee" ? (
+            <div className="notice notice-error">Error al crear: {decodeURIComponent(searchParams.error)}</div>
+          ) : null}
 
-          <section className="feedback-list stack">
-            {suggestions.map((item) => {
-              const summary = splitSuggestionText(item.suggestion_text);
-              const threadEvents = eventsBySuggestion.get(item.id) ?? [];
-              const lastMessage = threadEvents[0];
-              const preview = summary.body || summary.subject;
-
-              return (
-                <article key={item.id} className="card feedback-item-card">
-                  <div className="feedback-item-top">
-                    <div className="feedback-item-copy">
-                      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-                        <span className="crm-chip">{typeLabel(item.suggestion_type)}</span>
-                        <span className={`crm-chip ${statusChipClass(item.status)}`}>{item.status}</span>
-                      </div>
-                      <h3>{summary.subject}</h3>
-                      <p className="muted">{preview.length > 180 ? `${preview.slice(0, 180)}...` : preview}</p>
-                    </div>
-                    <div className="feedback-item-meta">
-                      <div><span>Creador</span><strong>{item.created_by_email}</strong></div>
-                      <div><span>Responsable</span><strong>{item.assigned_to_email ?? "Sin responsable"}</strong></div>
-                      <div><span>Actualizada</span><strong>{new Date(item.updated_at).toLocaleString("es-ES")}</strong></div>
-                      <div><span>Mensajes</span><strong>{threadEvents.filter((event) => event.event_type !== "creacion").length}</strong></div>
-                    </div>
+          {panel === "tracking" ? (
+            <>
+              <article className="card feedback-toolbar-card">
+                <div className="feedback-toolbar-row">
+                  <h3>Tickets existentes</h3>
+                  <div className="feedback-view-tabs">
+                    <Link href="/sugerencias?panel=tracking&view=mine" className={view === "mine" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>Mis abiertas</Link>
+                    {isAdmin ? <Link href="/sugerencias?panel=tracking&view=team" className={view === "team" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>Equipo</Link> : null}
+                    <Link href="/sugerencias?panel=tracking&view=closed" className={view === "closed" ? "contacts-tab contacts-tab-active" : "contacts-tab"}>Cerradas</Link>
                   </div>
+                </div>
 
-                  {lastMessage ? (
-                    <div className="feedback-item-last">
-                      <div className="muted">Último movimiento: {lastMessage.created_by_email} | {new Date(lastMessage.created_at).toLocaleString("es-ES")}</div>
-                      <p>{lastMessage.body.length > 140 ? `${lastMessage.body.slice(0, 140)}...` : lastMessage.body}</p>
-                    </div>
-                  ) : null}
+                <div className="feedback-metrics-grid">
+                  <article className="feedback-metric-card">
+                    <strong>{openItems.length}</strong>
+                    <span>Abiertas</span>
+                  </article>
+                  <article className="feedback-metric-card">
+                    <strong>{bugsCount}</strong>
+                    <span>Bugs</span>
+                  </article>
+                  <article className="feedback-metric-card">
+                    <strong>{closedItems.length}</strong>
+                    <span>Cerradas</span>
+                  </article>
+                </div>
+              </article>
 
-                  <div className="feedback-item-actions">
-                    <Link href={`/sugerencias/${item.id}`} className="companies-tab">Abrir hilo</Link>
-                  </div>
-                </article>
-              );
-            })}
-
-            {suggestions.length === 0 ? <div className="card"><p style={{ margin: 0 }}>No hay entradas en esta vista.</p></div> : null}
-          </section>
+              <form method="get" className="table-shell contacts-table-wrap">
+                <input type="hidden" name="panel" value="tracking" />
+                <input type="hidden" name="view" value={view} />
+                <table className="contacts-crm-table">
+                  <thead>
+                    <tr>
+                      <th>Tipo</th>
+                      <th>Contenido</th>
+                      <th>Estado</th>
+                      <th>Ultimo estado</th>
+                      <th>Responsable</th>
+                      <th>Fecha ultimo estado</th>
+                      <th>Informacion</th>
+                    </tr>
+                    <tr className="table-filter-row">
+                      <th><input name="filter_type" defaultValue={searchParams?.filter_type ?? ""} placeholder="Filtrar" /></th>
+                      <th><input name="filter_content" defaultValue={searchParams?.filter_content ?? ""} placeholder="Filtrar" /></th>
+                      <th><input name="filter_status" defaultValue={searchParams?.filter_status ?? ""} placeholder="Filtrar" /></th>
+                      <th><input name="filter_latest" defaultValue={searchParams?.filter_latest ?? ""} placeholder="Filtrar" /></th>
+                      <th><input name="filter_assignee" defaultValue={searchParams?.filter_assignee ?? ""} placeholder="Filtrar" /></th>
+                      <th><input type="date" name="filter_date" defaultValue={searchParams?.filter_date ?? ""} /></th>
+                      <th>
+                        <div className="table-filter-actions-inline">
+                          <button type="submit">Filtrar</button>
+                          <Link href={`/sugerencias?panel=tracking&view=${view}`} className="quick-pill quick-pill-ghost">Limpiar</Link>
+                        </div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSuggestionRows.length === 0 ? (
+                      <tr>
+                        <td colSpan={7}>
+                          <div className="table-empty-state">
+                            <strong>No hay entradas en esta vista.</strong>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredSuggestionRows.map((row) => (
+                        <tr key={row.item.id}>
+                          <td>{row.typeText}</td>
+                          <td>{row.preview.length > 140 ? `${row.preview.slice(0, 140)}...` : row.preview}</td>
+                          <td><span className={`crm-chip ${statusChipClass(row.item.status)}`}>{row.statusText}</span></td>
+                          <td>{row.latestStatus.length > 90 ? `${row.latestStatus.slice(0, 90)}...` : row.latestStatus}</td>
+                          <td>{row.assigneeText}</td>
+                          <td>{row.latestStatusAt ? new Date(row.latestStatusAt).toLocaleString("es-ES") : "-"}</td>
+                          <td><Link href={`/sugerencias/${row.item.id}`} className="companies-tab">Más</Link></td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </form>
+            </>
+          ) : (
+            <section className="card feedback-form-card feedback-form-card-wide">
+              <div>
+                <p className="workspace-kicker">Nueva entrada</p>
+                <h3>Añadir nuevo ticket</h3>
+              </div>
+              <form action={createEntryAction} className="stack">
+                <label className="form-field">
+                  <span>Tipo</span>
+                  <select name="suggestion_type" defaultValue="sugerencia">
+                    <option value="sugerencia">Sugerencia</option>
+                    <option value="bug">Bug</option>
+                    <option value="nota">Nota</option>
+                  </select>
+                </label>
+                <label className="form-field">
+                  <span>Asunto</span>
+                  <input name="subject" placeholder="Ej. Error al guardar una actividad" required />
+                </label>
+                <label className="form-field">
+                  <span>Responsable</span>
+                  <select name="assigned_to_user_id" defaultValue={user.id}>
+                    <option value="">Sin responsable</option>
+                    {users.map((option) => (
+                      <option key={option.id} value={option.id}>{userLabel(option)}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="form-field">
+                  <span>Mensaje inicial</span>
+                  <textarea name="body" rows={7} placeholder="Explica el contexto o la propuesta..." required />
+                </label>
+                <button type="submit">Crear hilo</button>
+              </form>
+            </section>
+          )}
         </section>
-
-        <aside className="feedback-side stack">
-          <article className="card feedback-form-card">
-            <div>
-              <p className="workspace-kicker">Nueva entrada</p>
-              <h3>Crear hilo</h3>
-            </div>
-            <form action={createEntryAction} className="stack">
-              <label className="form-field">
-                <span>Tipo</span>
-                <select name="suggestion_type" defaultValue="sugerencia">
-                  <option value="sugerencia">Sugerencia</option>
-                  <option value="bug">Bug</option>
-                  <option value="nota">Nota</option>
-                </select>
-              </label>
-              <label className="form-field">
-                <span>Asunto</span>
-                <input name="subject" placeholder="Ej. Error al guardar una actividad" required />
-              </label>
-              <label className="form-field">
-                <span>Responsable</span>
-                <select name="assigned_to_user_id" defaultValue={user.id}>
-                  <option value="">Sin responsable</option>
-                  {users.map((option) => (
-                    <option key={option.id} value={option.id}>{userLabel(option)}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="form-field">
-                <span>Mensaje inicial</span>
-                <textarea name="body" rows={7} placeholder="Explica el contexto o la propuesta..." required />
-              </label>
-              <button type="submit">Crear hilo</button>
-            </form>
-          </article>
-
-          <article className="card feedback-form-card">
-            <h3>Vista actual</h3>
-            <p className="muted">
-              {view === "mine"
-                ? "Entradas creadas por ti o asignadas a ti."
-                : view === "team"
-                  ? "Conversaciones abiertas para seguimiento del equipo."
-                  : "Entradas resueltas o descartadas."}
-            </p>
-          </article>
-        </aside>
       </div>
     </AppShell>
   );
 }
+
+

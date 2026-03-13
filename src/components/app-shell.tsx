@@ -104,6 +104,7 @@ export async function AppShell({
         { href: "/investors", label: "Compañias", icon: "companies" },
         { href: "/actividades", label: "Actividades", icon: "activity" },
         { href: "/acuerdos", label: "Negocios", icon: "deals" },
+        { href: "/archivos", label: "Archivos", icon: "report" },
         { href: "/search", label: "B\u00fasqueda global", icon: "search" }
       ]
     },

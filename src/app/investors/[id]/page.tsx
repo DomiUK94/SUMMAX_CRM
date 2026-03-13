@@ -1,13 +1,15 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { CrmIcon } from "@/components/ui/crm-icon";
 import { CompanyDetailCenter } from "@/components/company-detail-center";
+import { EntityFilesPanel } from "@/components/entity-files-panel";
 import { CompanyProfileEditDialog } from "@/components/company-profile-edit-dialog";
 import { CompanyNotesDialog } from "@/components/company-notes-dialog";
 import { requireUser } from "@/lib/auth/session";
 import { addEntityNote, getInvestorById, updateInvestorProfile } from "@/lib/db/crm";
+import { deleteEntityFile, listEntityFilesWithUrls, normalizeEntityFileError, uploadEntityFile } from "@/lib/db/entity-files";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
 type PageProps = {
@@ -92,10 +94,61 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
     }
   }
 
+  async function uploadFileAction(formData: FormData) {
+    "use server";
+    const actor = await requireUser();
+    const file = formData.get("file");
+
+    if (!(file instanceof File) || file.size === 0) {
+      redirect(`/investors/${params.id}?error=file_missing`);
+    }
+
+    try {
+      await uploadEntityFile({
+        entityType: "investor",
+        entityId: params.id,
+        file,
+        actorUserId: actor.id,
+        actorEmail: actor.email
+      });
+    } catch (error) {
+      redirect(`/investors/${params.id}?error=${normalizeEntityFileError(error)}`);
+    }
+
+    revalidatePath(`/investors/${params.id}`);
+    redirect(`/investors/${params.id}?ok=file_uploaded`);
+  }
+
+  async function deleteFileAction(formData: FormData) {
+    "use server";
+    const actor = await requireUser();
+    const fileId = String(formData.get("file_id") ?? "").trim();
+
+    if (!fileId) {
+      redirect(`/investors/${params.id}?error=file_not_found`);
+    }
+
+    try {
+      await deleteEntityFile({
+        entityType: "investor",
+        entityId: params.id,
+        fileId,
+        actorUserId: actor.id,
+        actorEmail: actor.email
+      });
+    } catch (error) {
+      const code = normalizeEntityFileError(error) === "file_not_found" ? "file_not_found" : "file_delete_failed";
+      redirect(`/investors/${params.id}?error=${code}`);
+    }
+
+    revalidatePath(`/investors/${params.id}`);
+    redirect(`/investors/${params.id}?ok=file_deleted`);
+  }
+
   if (!data.investor) {
     return (
-      <AppShell title="Compañia" canViewGlobal={user.can_view_global_dashboard}>
-        <div className="card">Compañia no encontrada.</div>
+      <AppShell title="Compania" canViewGlobal={user.can_view_global_dashboard}>
+        <div className="card">Compania no encontrada.</div>
       </AppShell>
     );
   }
@@ -109,6 +162,7 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
     created_at: formatDateTime(note.created_at),
     created_by_email: note.created_by_email ?? null
   }));
+  const attachments = await listEntityFilesWithUrls("investor", params.id);
   const initials = investor.name
     .split(" ")
     .filter(Boolean)
@@ -158,9 +212,9 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
     { label: "Portfolio", value: investor.portfolio || "--" },
     { label: "LinkedIn", value: investor.linkedin || "--" },
     { label: "Encaje SUMMAX", value: investor.fit || "--" },
-    { label: "Tamaño", value: investor.company_size || "--" },
-    { label: "Inversión mínima", value: investor.min_investment || "--" },
-    { label: "Inversión máxima", value: investor.max_investment || "--" },
+    { label: "Tamano", value: investor.company_size || "--" },
+    { label: "Inversion minima", value: investor.min_investment || "--" },
+    { label: "Inversion maxima", value: investor.max_investment || "--" },
     { label: "Motivo", value: investor.reason || "--", wide: true },
     { label: "Comentarios", value: investor.comments || "--", wide: true }
   ];
@@ -173,14 +227,14 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
   ];
 
   return (
-    <AppShell title={investor.name} subtitle="Ficha compacta de compañia" canViewGlobal={user.can_view_global_dashboard} showHeader={false}>
+    <AppShell title={investor.name} subtitle="Ficha compacta de compania" canViewGlobal={user.can_view_global_dashboard} showHeader={false}>
       <div className="company-record-layout">
         <aside className="company-record-aside stack">
           <section className="company-record-primary card">
             <div className="company-record-topbar">
               <Link href="/investors" className="company-record-back">
                 <CrmIcon name="back" className="crm-icon" />
-                <span>Compañias</span>
+                <span>Companias</span>
               </Link>
             </div>
 
@@ -220,7 +274,7 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
             <div className="company-record-section-head">
               <div className="row" style={{ gap: 8, alignItems: "center" }}>
                 <CrmIcon name="chevron_down" className="crm-icon" />
-                <h3>Información clave</h3>
+                <h3>Informacion clave</h3>
               </div>
               <div className="row" style={{ gap: 10, alignItems: "center" }}>
                 <CompanyProfileEditDialog action={updateInvestorAction} defaults={defaults} iconOnly />
@@ -228,10 +282,10 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
             </div>
 
             <div className="company-record-info-list">
-              <div><span>Propietario del registro de compañía</span><strong>Sin propietario</strong></div>
+              <div><span>Propietario del registro de compania</span><strong>Sin propietario</strong></div>
               <div><span>Estado</span><strong>{investor.status_name ?? investor.priority ?? "--"}</strong></div>
               <div><span>Tipo</span><strong>{investor.tipo_fondo || investor.category || "--"}</strong></div>
-              <div><span>Último contacto</span><strong>{formatDateTime(lastTouch)}</strong></div>
+              <div><span>Ultimo contacto</span><strong>{formatDateTime(lastTouch)}</strong></div>
             </div>
           </section>
         </aside>
@@ -249,7 +303,7 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
           }}
           activities={activities.map((activity) => ({
             id: String(activity.id),
-            title: activity.title ?? "(sin título)",
+            title: activity.title ?? "(sin titulo)",
             type: activity.activity_type ?? "--",
             occurredAt: formatDateTime(activity.occurred_at),
             body: activity.body ?? ""
@@ -270,7 +324,7 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
                 <details className="company-record-mini-menu">
                   <summary className="company-record-mini-action">Agregar</summary>
                   <div className="company-record-mini-menu-list">
-                    <Link href={`/contacts/new?investor_id=${encodeURIComponent(params.id)}`} className="company-record-mini-menu-item">Añadir un nuevo contacto</Link>
+                    <Link href={`/contacts/new?investor_id=${encodeURIComponent(params.id)}`} className="company-record-mini-menu-item">Anadir un nuevo contacto</Link>
                     <Link href={`/investors/${encodeURIComponent(params.id)}/contacts/link`} className="company-record-mini-menu-item">Agregar contacto existente</Link>
                   </div>
                 </details>
@@ -300,15 +354,18 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
               <p className="muted">Sin negocios asociados.</p>
             </div>
           </details>
+
+          <EntityFilesPanel
+            theme="company"
+            entityType="investor"
+            entityId={params.id}
+            files={attachments}
+            uploadAction={uploadFileAction}
+            deleteAction={deleteFileAction}
+            searchParams={searchParams}
+          />
         </aside>
       </div>
     </AppShell>
   );
 }
-
-
-
-
-
-
-
