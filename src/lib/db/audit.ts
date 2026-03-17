@@ -2,7 +2,7 @@
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
 type AuditAction = "create" | "update" | "delete" | "merge" | "assign" | "status_change";
-type AuditEntity = "contact" | "investor" | "deal" | "activity" | "saved_view" | "tag";
+type AuditEntity = "contact" | "investor" | "lead" | "opportunity" | "task" | "product" | "saved_view" | "tag";
 
 export async function writeAuditEntry(params: {
   entityType: AuditEntity;

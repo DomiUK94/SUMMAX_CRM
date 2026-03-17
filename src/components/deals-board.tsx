@@ -12,7 +12,7 @@ import {
   useReactTable
 } from "@tanstack/react-table";
 import { usePersistedState } from "@/lib/ui/use-persisted-state";
-import { useSavedViews } from "@/lib/ui/use-saved-views";
+import { useUserColumnVisibility } from "@/lib/ui/use-user-column-visibility";
 import { DataTable } from "@/components/ui/data-table";
 import { CrmIcon } from "@/components/ui/crm-icon";
 
@@ -148,14 +148,13 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
   const [byStage, setByStage] = useState<Record<string, DealCard[]>>(initialByStage);
   const [dragState, setDragState] = useState<DragState>(null);
   const [hoverStage, setHoverStage] = useState<string | null>(null);
-  const [selectedViewId, setSelectedViewId] = useState("");
   const [selectedDeal, setSelectedDeal] = useState<{ stage: string; card: DealCard } | null>(null);
   const [toast, setToast] = useState<{ tone: ToastTone; message: string } | null>(null);
   const [viewMode, setViewMode] = usePersistedState<DealsViewMode>(`${prefix}:view_mode`, "panel");
   const [searchDraft, setSearchDraft] = usePersistedState(`${prefix}:search_draft`, "");
   const [searchApplied, setSearchApplied] = usePersistedState(`${prefix}:search_applied`, "");
   const [quickFilter, setQuickFilter] = usePersistedState<DealsQuickFilter>(`${prefix}:quick_filter`, "all");
-  const [columnVisibility, setColumnVisibility] = usePersistedState<VisibilityState>(`${prefix}:columns`, DEFAULT_COLUMNS);
+  const { columnVisibility, setColumnVisibility } = useUserColumnVisibility("business", `${prefix}:columns`, DEFAULT_COLUMNS);
 
   useEffect(() => {
     if (!toast) return;
@@ -166,29 +165,6 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
   function showToast(message: string, tone: ToastTone = "info") {
     setToast({ message, tone });
   }
-
-  const savedViews = useSavedViews({
-    module: "deals",
-    currentFilters: { searchApplied, viewMode, quickFilter, columns: columnVisibility },
-    onApply: (filters) => {
-      const nextSearch = typeof filters.searchApplied === "string" ? filters.searchApplied : "";
-      const nextView = filters.viewMode === "table" ? "table" : "panel";
-      const nextQuick =
-        filters.quickFilter === "all" ||
-        filters.quickFilter === "high_value" ||
-        filters.quickFilter === "without_contact" ||
-        filters.quickFilter === "close_30d"
-          ? filters.quickFilter
-          : "all";
-      const nextColumns = (filters.columns as VisibilityState) ?? DEFAULT_COLUMNS;
-      setSearchDraft(nextSearch);
-      setSearchApplied(nextSearch);
-      setViewMode(nextView);
-      setQuickFilter(nextQuick);
-      setColumnVisibility(nextColumns);
-      showToast("Vista aplicada.", "success");
-    }
-  });
 
   const totalDeals = useMemo(() => stages.reduce((acc, stage) => acc + (byStage[stage]?.length ?? 0), 0), [byStage, stages]);
 
@@ -365,28 +341,12 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
               <option value="panel">Panel</option>
               <option value="table">Tabla</option>
             </select>
-            <select
-              value={selectedViewId}
-              onChange={(event) => {
-                const id = event.target.value;
-                setSelectedViewId(id);
-                if (!id) return;
-                savedViews.applyView(id);
-              }}
-            >
-              <option value="">{savedViews.loading ? "Cargando vistas..." : "Vistas guardadas"}</option>
-              {savedViews.views.map((view) => (
-                <option key={view.id} value={view.id}>
-                  {view.name}
-                </option>
-              ))}
-            </select>
           </div>
 
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <button type="button" className="entity-toolbar-trigger">
-                <span className="toolbar-button-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span><span>Acciones</span>
+                <span className="toolbar-button-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span><span>+ / - Columnas</span>
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
@@ -401,31 +361,6 @@ export function DealsBoard({ stages, initialByStage, storageKeyPrefix }: DealsBo
                   ))}
                 </div>
                 <DropdownMenu.Separator className="radix-menu-separator" />
-                <DropdownMenu.Item
-                  className="radix-menu-item"
-                  onSelect={async (event) => {
-                    event.preventDefault();
-                    const name = window.prompt("Nombre de la vista");
-                    if (!name) return;
-                    await savedViews.saveCurrent(name);
-                    showToast("Vista guardada.", "success");
-                  }}
-                >
-                  Guardar vista
-                </DropdownMenu.Item>
-                <DropdownMenu.Item
-                  className="radix-menu-item"
-                  disabled={!selectedViewId}
-                  onSelect={async (event) => {
-                    event.preventDefault();
-                    if (!selectedViewId) return;
-                    await savedViews.deleteView(selectedViewId);
-                    setSelectedViewId("");
-                    showToast("Vista eliminada.", "info");
-                  }}
-                >
-                  Eliminar vista
-                </DropdownMenu.Item>
                 <DropdownMenu.Item
                   className="radix-menu-item"
                   onSelect={(event) => {

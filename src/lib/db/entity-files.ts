@@ -1,9 +1,10 @@
+import { validateAttachmentFile } from "@/lib/security/files";
 import { writeAuditEntry } from "@/lib/db/audit";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
 export const ENTITY_FILES_BUCKET = "crm-files";
-const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024;
+export const DRAFT_FILES_BUCKET = "crm-drafts";
 
 export type EntityFileEntityType = "contact" | "investor";
 
@@ -48,10 +49,17 @@ export function formatFileSize(sizeBytes: number) {
 
 export function normalizeEntityFileError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
-  if (message.includes("25 MB")) return "file_too_large";
-  if (message.includes("Selecciona un archivo")) return "file_missing";
+  if (message.includes("file_too_large") || message.includes("25 MB")) return "file_too_large";
+  if (message.includes("file_missing") || message.includes("Selecciona un archivo")) return "file_missing";
   if (message.includes("Archivo no encontrado")) return "file_not_found";
+  if (message.includes("file_type_not_allowed") || message.includes("file_type_blocked")) return "file_type_not_allowed";
   return "file_upload_failed";
+}
+
+export async function createSignedDownloadUrl(storageBucket: string, storagePath: string, expiresInSeconds = 5 * 60) {
+  const supabase = createSupabaseServerClient();
+  const result = await supabase.storage.from(storageBucket).createSignedUrl(storagePath, expiresInSeconds);
+  return result.data?.signedUrl ?? null;
 }
 
 export async function listEntityFiles(entityType: EntityFileEntityType, entityId: string): Promise<EntityFileRecord[]> {
@@ -74,15 +82,7 @@ export async function listEntityFilesWithUrls(entityType: EntityFileEntityType, 
   const files = await listEntityFiles(entityType, entityId);
   if (files.length === 0) return [];
 
-  const supabase = createSupabaseServerClient();
-  const storage = supabase.storage.from(ENTITY_FILES_BUCKET);
-
-  const signedUrls = await Promise.all(
-    files.map(async (file) => {
-      const result = await storage.createSignedUrl(file.storage_path, 60 * 60);
-      return result.data?.signedUrl ?? null;
-    })
-  );
+  const signedUrls = await Promise.all(files.map((file) => createSignedDownloadUrl(file.storage_bucket, file.storage_path)));
 
   return files.map((file, index) => ({
     ...file,
@@ -98,12 +98,10 @@ export async function uploadEntityFile(params: {
   actorEmail: string;
 }) {
   if (!params.file || params.file.size === 0) {
-    throw new Error("Selecciona un archivo antes de subirlo");
+    throw new Error("file_missing");
   }
 
-  if (params.file.size > MAX_FILE_SIZE_BYTES) {
-    throw new Error("El archivo supera el limite de 25 MB");
-  }
+  validateAttachmentFile(params.file);
 
   const storagePath = buildStoragePath(params.entityType, params.entityId, params.file.name);
   const fileBuffer = Buffer.from(await params.file.arrayBuffer());
@@ -167,7 +165,7 @@ export async function deleteEntityFile(params: {
   const db = createSourceCrmServerClient();
   const existing = await db
     .from("entity_files")
-    .select("id, file_name, storage_path")
+    .select("id, file_name, storage_bucket, storage_path")
     .eq("id", params.fileId)
     .eq("entity_type", params.entityType)
     .eq("entity_id", params.entityId)
@@ -182,7 +180,7 @@ export async function deleteEntityFile(params: {
   }
 
   const supabase = createSupabaseServerClient();
-  const storage = supabase.storage.from(ENTITY_FILES_BUCKET);
+  const storage = supabase.storage.from(existing.data.storage_bucket);
   const removeStorageResult = await storage.remove([existing.data.storage_path]);
   if (removeStorageResult.error) {
     throw removeStorageResult.error;

@@ -13,7 +13,7 @@ import {
 } from "@tanstack/react-table";
 import type { ListedInvestor } from "@/lib/db/crm";
 import { usePersistedState } from "@/lib/ui/use-persisted-state";
-import { useSavedViews } from "@/lib/ui/use-saved-views";
+import { useUserColumnVisibility } from "@/lib/ui/use-user-column-visibility";
 import { DataTable } from "@/components/ui/data-table";
 import { CrmIcon } from "@/components/ui/crm-icon";
 
@@ -68,12 +68,11 @@ function hasWebsite(value: string | null): boolean {
 export function InvestorsTable({ investors, storageKeyPrefix }: { investors: ListedInvestor[]; storageKeyPrefix?: string }) {
   const prefix = storageKeyPrefix ?? "investors";
   const [selected, setSelected] = useState<ListedInvestor | null>(null);
-  const [selectedViewId, setSelectedViewId] = useState("");
   const [searchDraft, setSearchDraft] = usePersistedState(`${prefix}:search_draft`, "");
   const [searchApplied, setSearchApplied] = usePersistedState(`${prefix}:search_applied`, "");
   const [viewMode, setViewMode] = usePersistedState<InvestorsViewMode>(`${prefix}:view_mode`, "table");
   const [quickFilter, setQuickFilter] = usePersistedState<InvestorsQuickFilter>(`${prefix}:quick_filter`, "all");
-  const [columnVisibility, setColumnVisibility] = usePersistedState<VisibilityState>(`${prefix}:columns`, DEFAULT_COLUMNS);
+  const { columnVisibility, setColumnVisibility } = useUserColumnVisibility("investors", `${prefix}:columns`, DEFAULT_COLUMNS);
   const [toast, setToast] = useState<{ tone: ToastTone; message: string } | null>(null);
 
   useEffect(() => {
@@ -85,26 +84,6 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
   function showToast(message: string, tone: ToastTone = "info") {
     setToast({ message, tone });
   }
-
-  const savedViews = useSavedViews({
-    module: "investors",
-    currentFilters: { searchApplied, viewMode, quickFilter, columns: columnVisibility },
-    onApply: (filters) => {
-      const nextSearch = typeof filters.searchApplied === "string" ? filters.searchApplied : "";
-      const nextView = "table";
-      const nextQuick =
-        filters.quickFilter === "all" || filters.quickFilter === "without_web" || filters.quickFilter === "updated_7d"
-          ? filters.quickFilter
-          : "all";
-      const nextColumns = (filters.columns as VisibilityState) ?? DEFAULT_COLUMNS;
-      setSearchDraft(nextSearch);
-      setSearchApplied(nextSearch);
-      setViewMode(nextView);
-      setQuickFilter(nextQuick);
-      setColumnVisibility(nextColumns);
-      showToast("Vista aplicada.", "success");
-    }
-  });
 
   const filteredInvestors = useMemo(() => {
     const q = searchApplied.trim().toLowerCase();
@@ -253,28 +232,12 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
             <select value={viewMode} onChange={() => setViewMode("table")}>
               <option value="table">Tabla</option>
             </select>
-            <select
-              value={selectedViewId}
-              onChange={(event) => {
-                const id = event.target.value;
-                setSelectedViewId(id);
-                if (!id) return;
-                savedViews.applyView(id);
-              }}
-            >
-              <option value="">{savedViews.loading ? "Cargando vistas..." : "Vistas guardadas"}</option>
-              {savedViews.views.map((view) => (
-                <option key={view.id} value={view.id}>
-                  {view.name}
-                </option>
-              ))}
-            </select>
           </div>
 
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <button type="button" className="entity-toolbar-trigger">
-                <span className="toolbar-button-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span><span>Acciones</span>
+                <span className="toolbar-button-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span><span>+ / - Columnas</span>
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
@@ -289,31 +252,6 @@ export function InvestorsTable({ investors, storageKeyPrefix }: { investors: Lis
                   ))}
                 </div>
                 <DropdownMenu.Separator className="radix-menu-separator" />
-                <DropdownMenu.Item
-                  className="radix-menu-item"
-                  onSelect={async (event) => {
-                    event.preventDefault();
-                    const name = window.prompt("Nombre de la vista");
-                    if (!name) return;
-                    await savedViews.saveCurrent(name);
-                    showToast("Vista guardada.", "success");
-                  }}
-                >
-                  Guardar vista
-                </DropdownMenu.Item>
-                <DropdownMenu.Item
-                  className="radix-menu-item"
-                  disabled={!selectedViewId}
-                  onSelect={async (event) => {
-                    event.preventDefault();
-                    if (!selectedViewId) return;
-                    await savedViews.deleteView(selectedViewId);
-                    setSelectedViewId("");
-                    showToast("Vista eliminada.", "info");
-                  }}
-                >
-                  Eliminar vista
-                </DropdownMenu.Item>
                 <DropdownMenu.Item
                   className="radix-menu-item"
                   onSelect={(event) => {

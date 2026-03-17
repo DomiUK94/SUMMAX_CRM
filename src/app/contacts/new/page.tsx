@@ -46,7 +46,6 @@ export default async function NewContactPage() {
       other_contact: String(formData.get("other_contact") ?? "").trim() || undefined,
       linkedin: String(formData.get("linkedin") ?? "").trim() || undefined,
       comments: String(formData.get("comments") ?? "").trim() || undefined,
-      status_name: String(formData.get("status_name") ?? "").trim() || undefined,
       owner_user_id: assignOwner ? actor.id : undefined,
       owner_email: assignOwner ? actor.email : undefined,
       actor_user_id: actor.id,

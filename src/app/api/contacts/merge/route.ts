@@ -40,7 +40,6 @@ export async function POST(request: Request) {
     rol: keep.rol ?? remove.rol ?? null,
     otro_contacto: keep.otro_contacto ?? remove.otro_contacto ?? null,
     linkedin: keep.linkedin ?? remove.linkedin ?? null,
-    prioritario: keep.prioritario ?? remove.prioritario ?? null,
     owner_user_id: keep.owner_user_id ?? remove.owner_user_id ?? null,
     owner_email: keep.owner_email ?? remove.owner_email ?? null,
     comentarios: [keep.comentarios, remove.comentarios].filter(Boolean).join(" | "),

@@ -8,9 +8,9 @@ import { EntityFilesPanel } from "@/components/entity-files-panel";
 import { CompanyProfileEditDialog } from "@/components/company-profile-edit-dialog";
 import { CompanyNotesDialog } from "@/components/company-notes-dialog";
 import { requireUser } from "@/lib/auth/session";
+import { getBusinessContextForInvestor } from "@/lib/db/business";
 import { addEntityNote, getInvestorById, updateInvestorProfile } from "@/lib/db/crm";
 import { deleteEntityFile, listEntityFilesWithUrls, normalizeEntityFileError, uploadEntityFile } from "@/lib/db/entity-files";
-import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
 type PageProps = {
   params: { id: string };
@@ -22,25 +22,18 @@ function formatDateTime(value: string | null | undefined) {
   return new Date(value).toLocaleString("es-ES");
 }
 
+function formatMoney(value: number | null) {
+  if (value === null) return "--";
+  return new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 0
+  }).format(value);
+}
+
 export default async function InvestorDetailPage({ params, searchParams }: PageProps) {
   const user = await requireUser();
-  const data = await getInvestorById(params.id);
-  const db = createSourceCrmServerClient();
-  const [activitiesRes, notesRes] = await Promise.all([
-    db
-      .from("activities")
-      .select("id, title, activity_type, occurred_at, body")
-      .eq("entity_type", "investor")
-      .eq("entity_id", Number(params.id))
-      .order("occurred_at", { ascending: false })
-      .limit(8),
-    db
-      .from("entity_notes")
-      .select("id, body, created_at, created_by_email")
-      .eq("entity_type", "investor")
-      .eq("entity_id", params.id)
-      .order("created_at", { ascending: false })
-  ]);
+  const [data, business] = await Promise.all([getInvestorById(params.id), getBusinessContextForInvestor(params.id)]);
 
   async function addNoteAction(formData: FormData) {
     "use server";
@@ -155,8 +148,7 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
 
   const investor = data.investor;
   const contacts = data.contacts;
-  const activities = activitiesRes.data ?? [];
-  const notes = (notesRes.data ?? []).map((note) => ({
+  const notes = data.comments.map((note) => ({
     id: String(note.id),
     body: note.body,
     created_at: formatDateTime(note.created_at),
@@ -170,7 +162,7 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
     .map((part: string) => part[0]?.toUpperCase() ?? "")
     .join("");
   const primaryContact = contacts[0] ?? null;
-  const lastTouch = activities[0]?.occurred_at ?? investor.updated_at;
+  const lastTouch = business.timeline[0]?.occurredAt ?? formatDateTime(investor.updated_at);
 
   const defaults = {
     name: investor.name,
@@ -189,20 +181,6 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
     reason: investor.reason ?? "",
     comments: investor.comments ?? ""
   };
-
-  const completedDeals = (() => {
-    const signal = `${investor.fit ?? ""} ${investor.priority ?? ""}`.toLowerCase();
-    const isCompleted = signal.includes("ganado") || signal.includes("cerrado") || signal.includes("won");
-    if (!isCompleted) return [];
-    return [
-      {
-        id: investor.id,
-        name: investor.name,
-        amount: investor.max_investment ?? "--",
-        closedAt: formatDateTime(investor.updated_at)
-      }
-    ];
-  })();
 
   const advancedItems = [
     { label: "Estrategia", value: investor.strategy || "--" },
@@ -223,7 +201,7 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
     { label: "Correo", icon: "mail" as const, href: primaryContact?.email ? `mailto:${primaryContact.email}` : undefined },
     { label: "LinkedIn", icon: "linkedin" as const, href: investor.linkedin ? investor.linkedin : undefined, external: Boolean(investor.linkedin) },
     { label: "Web", icon: "web" as const, href: investor.website ? investor.website : undefined, external: Boolean(investor.website) },
-    { label: "Tarea", icon: "task" as const, href: `/actividades/new?investor_id=${encodeURIComponent(params.id)}` }
+    { label: "Tarea", icon: "task" as const, href: "/actividades?section=new" }
   ];
 
   return (
@@ -234,7 +212,7 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
             <div className="company-record-topbar">
               <Link href="/investors" className="company-record-back">
                 <CrmIcon name="back" className="crm-icon" />
-                <span>Companias</span>
+                <span>Compañías</span>
               </Link>
             </div>
 
@@ -283,15 +261,15 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
 
             <div className="company-record-info-list">
               <div><span>Propietario del registro de compania</span><strong>Sin propietario</strong></div>
-              <div><span>Estado</span><strong>{investor.status_name ?? investor.priority ?? "--"}</strong></div>
+              <div><span>Leads asociados</span><strong>{business.leads.length}</strong></div>
+              <div><span>Opportunities asociadas</span><strong>{business.opportunities.length}</strong></div>
               <div><span>Tipo</span><strong>{investor.tipo_fondo || investor.category || "--"}</strong></div>
-              <div><span>Ultimo contacto</span><strong>{formatDateTime(lastTouch)}</strong></div>
+              <div><span>Ultimo contacto</span><strong>{lastTouch}</strong></div>
             </div>
           </section>
         </aside>
 
         <CompanyDetailCenter
-          investorId={params.id}
           defaults={defaults}
           profile={{
             city: investor.office || "--",
@@ -301,14 +279,14 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
             country: "--",
             sector: investor.sector || investor.category || "--"
           }}
-          activities={activities.map((activity) => ({
-            id: String(activity.id),
-            title: activity.title ?? "(sin titulo)",
-            type: activity.activity_type ?? "--",
-            occurredAt: formatDateTime(activity.occurred_at),
-            body: activity.body ?? ""
-          }))}
-          completedDeals={completedDeals}
+          completedDeals={business.opportunities
+            .filter((opportunity) => opportunity.resolution === "won")
+            .map((opportunity) => ({
+              id: opportunity.id,
+              name: opportunity.name,
+              amount: formatMoney(opportunity.closedAmount),
+              closedAt: opportunity.openedAt
+            }))}
           advanced={advancedItems}
           action={updateInvestorAction}
         />
@@ -334,24 +312,43 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
               {contacts.length > 0 ? contacts.map((contact) => (
                 <Link key={contact.id} href={`/contacts/${encodeURIComponent(contact.id)}`} className="company-record-mini-item">
                   <strong>{contact.full_name}</strong>
-                  <span>{contact.email ?? contact.status_name ?? "Sin datos"}</span>
+                  <span>{contact.email ?? "Sin datos"}</span>
                 </Link>
               )) : <p className="muted">Sin contactos asociados.</p>}
             </div>
           </details>
 
-          <details className="company-record-mini-panel">
+          <details className="company-record-mini-panel" open>
             <summary className="company-record-mini-summary">
               <div className="company-record-mini-title">
                 <CrmIcon name="chevron_down" className="crm-icon" />
-                <span>Negocios (0)</span>
-              </div>
-              <div className="company-record-mini-actions">
-                <span className="company-record-mini-action">Agregar</span>
+                <span>Leads ({business.leads.length})</span>
               </div>
             </summary>
             <div className="company-record-mini-body">
-              <p className="muted">Sin negocios asociados.</p>
+              {business.leads.length > 0 ? business.leads.map((lead) => (
+                <Link key={lead.id} href={`/acuerdos/leads/${encodeURIComponent(lead.id)}`} className="company-record-mini-item">
+                  <strong>{lead.name}</strong>
+                  <span>{lead.stateName} · {lead.resolution}</span>
+                </Link>
+              )) : <p className="muted">Sin leads asociados.</p>}
+            </div>
+          </details>
+
+          <details className="company-record-mini-panel" open>
+            <summary className="company-record-mini-summary">
+              <div className="company-record-mini-title">
+                <CrmIcon name="chevron_down" className="crm-icon" />
+                <span>Opportunities ({business.opportunities.length})</span>
+              </div>
+            </summary>
+            <div className="company-record-mini-body">
+              {business.opportunities.length > 0 ? business.opportunities.map((opportunity) => (
+                <Link key={opportunity.id} href={`/acuerdos/opportunities/${encodeURIComponent(opportunity.id)}`} className="company-record-mini-item">
+                  <strong>{opportunity.name}</strong>
+                  <span>{opportunity.productName} · {opportunity.stateName}</span>
+                </Link>
+              )) : <p className="muted">Sin opportunities asociadas.</p>}
             </div>
           </details>
 

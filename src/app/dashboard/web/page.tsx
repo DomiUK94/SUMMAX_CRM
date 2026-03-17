@@ -1,4 +1,4 @@
-﻿import Link from "next/link";
+import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { StaticTable } from "@/components/ui/static-table";
 import { getWebDashboardData } from "@/lib/db/dashboard";
@@ -39,6 +39,10 @@ function compareNullableDates(a: string | null, b: string | null, order: SortOrd
 function sortArrow(field: SortField, activeField: SortField | null, activeOrder: SortOrder): string {
   if (field !== activeField) return "↕";
   return activeOrder === "asc" ? "↑" : "↓";
+}
+
+function formatPercent(value: number): string {
+  return `${Math.round(value)}%`;
 }
 
 export default async function WebDashboardPage({
@@ -82,6 +86,12 @@ export default async function WebDashboardPage({
     usersWithCardsOpened: filteredWebRows.filter((row) => row.cardsOpened > 0).length
   };
 
+  const ndaRate = filteredWebTotals.users > 0 ? (filteredWebTotals.ndaAccepted / filteredWebTotals.users) * 100 : 0;
+  const engagementRate = filteredWebTotals.users > 0 ? (filteredWebTotals.usersWithCardsOpened / filteredWebTotals.users) * 100 : 0;
+  const averageCardsPerActiveUser =
+    filteredWebTotals.usersWithCardsOpened > 0 ? filteredWebTotals.cardsOpened / filteredWebTotals.usersWithCardsOpened : 0;
+  const mostRecentActivity = filteredWebRows.find((row) => row.lastCardOpenedAt || row.lastLoginAt) ?? null;
+
   const buildSortHref = (field: SortField) => {
     const params = new URLSearchParams();
     if (searchParams?.email) params.set("email", searchParams.email);
@@ -95,22 +105,140 @@ export default async function WebDashboardPage({
     <AppShell title="Dashboard Web" subtitle="Actividad y engagement del portal web" canViewGlobal={user.can_view_global_dashboard}>
       <section className="dashboard-hero dashboard-web-hero">
         <div className="card dashboard-highlight-card dashboard-highlight-card-warm dashboard-web-highlight-card">
-          <p className="workspace-kicker"><span className="workspace-kicker-icon" aria-hidden="true"><CrmIcon name="dashboard" className="crm-icon" /></span><span>Web</span></p>
+          <p className="workspace-kicker">
+            <span className="workspace-kicker-icon" aria-hidden="true">
+              <CrmIcon name="web" className="crm-icon" />
+            </span>
+            <span>Web</span>
+          </p>
           <h2>Actividad por usuario web</h2>
-          <p className="muted">Pulsa en Ultimo login, NDA aceptado o Ultima carta abierta para ordenar ascendente o descendente.</p>
-
+          <p className="muted">Sigue adopción, activación y consumo del portal. La tabla permite ordenar por login, NDA y última carta abierta.</p>
+          <div className="dashboard-highlight-metric">
+            <strong>{filteredWebTotals.users}</strong>
+            <span>usuarios dentro del segmento filtrado</span>
+          </div>
+          <div className="dashboard-insight-grid">
+            <div className="dashboard-insight-card dashboard-insight-card-soft">
+              <span className="dashboard-insight-label">Conversión NDA</span>
+              <strong>{formatPercent(ndaRate)}</strong>
+              <small>{filteredWebTotals.ndaAccepted} usuarios con NDA aceptado</small>
+            </div>
+            <div className="dashboard-insight-card dashboard-insight-card-soft">
+              <span className="dashboard-insight-label">Usuarios activos</span>
+              <strong>{formatPercent(engagementRate)}</strong>
+              <small>{filteredWebTotals.usersWithCardsOpened} usuarios con aperturas</small>
+            </div>
+          </div>
         </div>
 
         <div className="dashboard-web-kpi-grid">
           <div className="card dashboard-kpi-card">
-            <span className="dashboard-kpi-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span>
+            <span className="dashboard-kpi-icon" aria-hidden="true">
+              <CrmIcon name="overview" className="crm-icon" />
+            </span>
+            <span>Usuarios filtrados</span>
+            <strong>{filteredWebTotals.users}</strong>
+          </div>
+          <div className="card dashboard-kpi-card">
+            <span className="dashboard-kpi-icon" aria-hidden="true">
+              <CrmIcon name="mail" className="crm-icon" />
+            </span>
             <span>NDA aceptado</span>
             <strong>{filteredWebTotals.ndaAccepted}</strong>
           </div>
           <div className="card dashboard-kpi-card">
-            <span className="dashboard-kpi-icon" aria-hidden="true"><CrmIcon name="contacts" className="crm-icon" /></span>
+            <span className="dashboard-kpi-icon" aria-hidden="true">
+              <CrmIcon name="contacts" className="crm-icon" />
+            </span>
             <span>Usuarios con aperturas</span>
             <strong>{filteredWebTotals.usersWithCardsOpened}</strong>
+          </div>
+          <div className="card dashboard-kpi-card">
+            <span className="dashboard-kpi-icon" aria-hidden="true">
+              <CrmIcon name="report" className="crm-icon" />
+            </span>
+            <span>Cartas abiertas</span>
+            <strong>{filteredWebTotals.cardsOpened}</strong>
+          </div>
+        </div>
+      </section>
+
+      <section className="dashboard-split-grid dashboard-analysis-grid">
+        <div className="card dashboard-table-card">
+          <div className="dashboard-section-head">
+            <div>
+              <p className="workspace-kicker">
+                <span className="workspace-kicker-icon" aria-hidden="true">
+                  <CrmIcon name="spark" className="crm-icon" />
+                </span>
+                <span>Lectura rápida</span>
+              </p>
+              <h3>Señales de engagement</h3>
+              <p className="muted">Indicadores calculados sobre el resultado actual de filtros.</p>
+            </div>
+          </div>
+          <div className="dashboard-stat-list">
+            <div className="dashboard-stat-row">
+              <div>
+                <strong>Ratio de adopción</strong>
+                <span>Porcentaje de usuarios que ya aceptaron NDA.</span>
+              </div>
+              <b>{formatPercent(ndaRate)}</b>
+            </div>
+            <div className="dashboard-stat-row">
+              <div>
+                <strong>Ratio de consumo</strong>
+                <span>Usuarios que han abierto al menos una carta.</span>
+              </div>
+              <b>{formatPercent(engagementRate)}</b>
+            </div>
+            <div className="dashboard-stat-row">
+              <div>
+                <strong>Intensidad media</strong>
+                <span>Aperturas promedio entre usuarios activos.</span>
+              </div>
+              <b>{averageCardsPerActiveUser.toLocaleString("es-ES", { maximumFractionDigits: 1 })}</b>
+            </div>
+            <div className="dashboard-stat-row">
+              <div>
+                <strong>Última actividad</strong>
+                <span>{mostRecentActivity ? mostRecentActivity.email : "Sin actividad reciente"}</span>
+              </div>
+              <b>{mostRecentActivity ? formatDateTime(mostRecentActivity.lastCardOpenedAt ?? mostRecentActivity.lastLoginAt) : "-"}</b>
+            </div>
+          </div>
+        </div>
+
+        <div className="card dashboard-table-card">
+          <div className="dashboard-section-head">
+            <div>
+              <p className="workspace-kicker">
+                <span className="workspace-kicker-icon" aria-hidden="true">
+                  <CrmIcon name="task" className="crm-icon" />
+                </span>
+                <span>Embudo</span>
+              </p>
+              <h3>Ruta de activación</h3>
+              <p className="muted">Secuencia básica desde registro hasta uso real del portal.</p>
+            </div>
+          </div>
+          <div className="dashboard-funnel">
+            <div className="dashboard-funnel-step">
+              <span>Usuarios registrados</span>
+              <strong>{filteredWebTotals.users}</strong>
+            </div>
+            <div className="dashboard-funnel-step">
+              <span>NDA aceptado</span>
+              <strong>{filteredWebTotals.ndaAccepted}</strong>
+            </div>
+            <div className="dashboard-funnel-step">
+              <span>Con aperturas</span>
+              <strong>{filteredWebTotals.usersWithCardsOpened}</strong>
+            </div>
+            <div className="dashboard-funnel-step">
+              <span>Total aperturas</span>
+              <strong>{filteredWebTotals.cardsOpened}</strong>
+            </div>
           </div>
         </div>
       </section>
@@ -119,8 +247,8 @@ export default async function WebDashboardPage({
         <div className="dashboard-section-head">
           <div>
             <p className="workspace-kicker">Filtros</p>
-            <h3>Dashboard Web</h3>
-            <p className="muted">Email y aperturas mínimas se filtran abajo. Las fechas solo se ordenan desde la cabecera.</p>
+            <h3>Usuarios del portal</h3>
+            <p className="muted">Email y aperturas mínimas se filtran abajo. Las fechas se ordenan desde la cabecera.</p>
           </div>
         </div>
 
@@ -128,7 +256,7 @@ export default async function WebDashboardPage({
           columns={[
             "Email",
             <Link key="last-login-sort" href={buildSortHref("lastLoginAt")} scroll={false} className="table-sort-link">
-              <span>Ultimo login</span>
+              <span>Último login</span>
               <span className="table-sort-arrow">{sortArrow("lastLoginAt", sortField, sortOrder)}</span>
             </Link>,
             <Link key="nda-sort" href={buildSortHref("ndaAcceptedAt")} scroll={false} className="table-sort-link">
@@ -137,7 +265,7 @@ export default async function WebDashboardPage({
             </Link>,
             "Cartas abiertas",
             <Link key="last-card-sort" href={buildSortHref("lastCardOpenedAt")} scroll={false} className="table-sort-link">
-              <span>Ultima carta abierta</span>
+              <span>Última carta abierta</span>
               <span className="table-sort-arrow">{sortArrow("lastCardOpenedAt", sortField, sortOrder)}</span>
             </Link>
           ]}
@@ -160,7 +288,9 @@ export default async function WebDashboardPage({
           emptyAction={
             <div className="table-filter-actions">
               <button type="submit" form="dashboard-web-filters">Aplicar filtros</button>
-              <Link href="/dashboard/web" className="companies-tab">Limpiar</Link>
+              <Link href="/dashboard/web" className="companies-tab">
+                Limpiar
+              </Link>
             </div>
           }
         />
@@ -170,13 +300,12 @@ export default async function WebDashboardPage({
           <input type="hidden" name="order" value={sortOrder} />
           <div className="form-actions-bar form-actions-bar-start">
             <button type="submit">Aplicar filtros</button>
-            <Link href="/dashboard/web" className="companies-tab">Limpiar</Link>
+            <Link href="/dashboard/web" className="companies-tab">
+              Limpiar
+            </Link>
           </div>
         </form>
       </div>
     </AppShell>
   );
 }
-
-
-

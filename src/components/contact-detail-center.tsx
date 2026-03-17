@@ -1,11 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ContactProfileEditDialog } from "@/components/contact-profile-edit-dialog";
 
 type ContactDefaults = {
   full_name: string;
-  status_name: string;
   email: string;
   phone: string;
   role: string;
@@ -55,7 +54,6 @@ type Props = {
   defaults: ContactDefaults;
   info: {
     name: string;
-    status: string;
     email: string;
     phone: string;
     role: string;
@@ -74,13 +72,20 @@ type Props = {
     comments: string;
     tags: string;
     lastActivity: string;
+    leads: string;
+    opportunities: string;
   };
   updateAction: (formData: FormData) => void | Promise<void>;
-  changeStatusAction: (formData: FormData) => void | Promise<void>;
   addCommentAction: (formData: FormData) => void | Promise<void>;
+  initialTab?: string;
 };
 
 type ContactTab = "info" | "activities" | "revenue" | "advanced";
+
+function normalizeContactTab(value: string | undefined): ContactTab {
+  if (value === "activities" || value === "revenue" || value === "advanced") return value;
+  return "info";
+}
 
 export function ContactDetailCenter({
   defaults,
@@ -91,16 +96,30 @@ export function ContactDetailCenter({
   auditRows,
   advanced,
   updateAction,
-  changeStatusAction,
-  addCommentAction
+  addCommentAction,
+  initialTab
 }: Props) {
-  const [tab, setTab] = useState<ContactTab>("info");
+  const [tab, setTab] = useState<ContactTab>(normalizeContactTab(initialTab));
+
+  useEffect(() => {
+    setTab(normalizeContactTab(initialTab));
+  }, [initialTab]);
+
+  useEffect(() => {
+    if (tab !== "activities") return;
+    if (typeof window === "undefined" || window.location.hash !== "#contact-notes") return;
+
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById("contact-notes")?.scrollIntoView({ block: "start" });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [tab]);
 
   return (
     <section className="contact-record-main stack">
       <div className="contact-record-center-tabs" aria-label={"Secciones del contacto"}>
         <button type="button" className={`contact-record-center-tab ${tab === "info" ? "contact-record-center-tab-active" : ""}`} onClick={() => setTab("info")}>{"Informaci\u00f3n"}</button>
-        <button type="button" className={`contact-record-center-tab ${tab === "activities" ? "contact-record-center-tab-active" : ""}`} onClick={() => setTab("activities")}>Actividades</button>
         <button type="button" className={`contact-record-center-tab ${tab === "revenue" ? "contact-record-center-tab-active" : ""}`} onClick={() => setTab("revenue")}>Ingresos</button>
         <button type="button" className={`contact-record-center-tab ${tab === "advanced" ? "contact-record-center-tab-active" : ""}`} onClick={() => setTab("advanced")}>{"Informaci\u00f3n avanzada"}</button>
       </div>
@@ -110,22 +129,20 @@ export function ContactDetailCenter({
           <div className="company-record-section-head">
             <div>
               <p className="workspace-kicker">{"Informaci\u00f3n"}</p>
-              <h3>Perfil del contacto</h3>
             </div>
             <div className="company-profile-actions">
               <ContactProfileEditDialog action={updateAction} defaults={defaults} />
             </div>
           </div>
 
-          <div className="company-profile-grid">
+          <div className="company-profile-grid contact-profile-grid">
             <div className="company-profile-item"><span>Nombre</span><strong>{info.name}</strong></div>
-            <div className="company-profile-item"><span>Estado</span><strong>{info.status}</strong></div>
             <div className="company-profile-item"><span>Email</span><strong>{info.email}</strong></div>
             <div className="company-profile-item"><span>{"Tel\u00e9fono"}</span><strong>{info.phone}</strong></div>
             <div className="company-profile-item"><span>Rol</span><strong>{info.role}</strong></div>
             <div className="company-profile-item"><span>Otro contacto</span><strong>{info.otherContact}</strong></div>
             <div className="company-profile-item"><span>LinkedIn</span><strong>{info.linkedin}</strong></div>
-            <div className="company-profile-item"><span>Comentarios</span><strong>{info.comments}</strong></div>
+            <div className="company-profile-item contact-profile-item-wide"><span>Comentarios</span><strong>{info.comments}</strong></div>
           </div>
         </article>
       ) : null}
@@ -134,35 +151,23 @@ export function ContactDetailCenter({
         <article className="card company-edit-card stack">
           <div className="company-record-section-head">
             <div>
-              <p className="workspace-kicker">Actividades</p>
-              <h3>Seguimiento y notas</h3>
+              <p className="workspace-kicker">Actividad comercial</p>
+              <h3>Timeline y notas</h3>
             </div>
-            <button type="button" className="company-profile-edit-button">{"A\u00f1adir actividad"}</button>
           </div>
-
-          <form action={changeStatusAction} className="editor-form-grid editor-form-grid-3 company-detail-form">
-            <label className="form-field">
-              <span>Estado</span>
-              <input name="to_status_name" defaultValue={defaults.status_name || "Pendiente de contactar"} />
-            </label>
-            <label className="form-field">
-              <span>Seguimiento</span>
-              <input type="date" name="follow_up_date" required />
-            </label>
-            <label className="form-field company-detail-field-span-3">
-              <span>Nota</span>
-              <textarea name="note" rows={3} placeholder="Describe el siguiente paso" />
-            </label>
-            <div className="company-detail-form-actions company-detail-field-span-3">
-              <button type="submit">{"Guardar actualizaci\u00f3n"}</button>
-            </div>
-          </form>
 
           <div id="contact-notes" className="company-note-list stack">
             <form action={addCommentAction} className="stack">
               <textarea name="body" rows={4} placeholder={"A\u00f1adir nota interna..."} />
               <button type="submit">Guardar nota</button>
             </form>
+            {activities.map((activity) => (
+              <div key={activity.id} className="company-note-item">
+                <strong>{activity.title}</strong>
+                <div className="muted">{activity.type} | {activity.occurredAt}</div>
+                <p>{activity.body}</p>
+              </div>
+            ))}
             {comments.map((comment) => (
               <div key={comment.id} className="company-note-item">
                 <div className="muted">{comment.createdBy} | {comment.createdAt}</div>
@@ -206,6 +211,8 @@ export function ContactDetailCenter({
             <div className="company-profile-item"><span>Propietario</span><strong>{advanced.owner}</strong></div>
             <div className="company-profile-item"><span>LinkedIn</span><strong>{advanced.linkedin}</strong></div>
             <div className="company-profile-item"><span>{"\u00daltima actividad"}</span><strong>{advanced.lastActivity}</strong></div>
+            <div className="company-profile-item"><span>Leads</span><strong>{advanced.leads}</strong></div>
+            <div className="company-profile-item"><span>Opportunities</span><strong>{advanced.opportunities}</strong></div>
             <div className="company-profile-item"><span>Etiquetas</span><strong>{advanced.tags}</strong></div>
             <div className="company-profile-item company-profile-item-wide"><span>Comentarios</span><strong>{advanced.comments}</strong></div>
           </div>

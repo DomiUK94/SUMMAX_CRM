@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { CrmIcon } from "@/components/ui/crm-icon";
 import { requireUser } from "@/lib/auth/session";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
+import { createSourceCrmAdminClient } from "@/lib/supabase/sourcecrm-admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 function friendlyError(raw: string | undefined): string | null {
@@ -31,7 +32,7 @@ export default async function MiCuentaPage({
     const actor = await requireUser();
     const fullName = String(formData.get("full_name") ?? "").trim();
 
-    const db = createSourceCrmServerClient();
+    const db = createSourceCrmAdminClient();
     await db
       .from("users")
       .update({

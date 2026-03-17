@@ -1,0 +1,48 @@
+PROPUESTA DE MODELO,,,,,,
+Jerarquia propuesta: Lead / Opportunity + Estado + Tarea,,,,,,
+Regla de conversion: cuando el Lead supera NDA firmado pasa a Opportunity,,,,,,
+,,,,,,
+ESTADO,,,,,,
+EstadoID,Nombre,TipoEntidad,EstadoPrevioID,EsTerminal,EsConversor,Notas
+1,Pendiente de contactar,Lead,,No,No,Inicio del pipeline de lead
+2,En contacto,Lead,1,No,No,Seguimiento comercial inicial
+3,Documentacion inicial,Lead,2,No,No,Envio y revision de documentacion
+4,NDA,Lead,3,No,Si,Ultimo estado del lead antes de convertir a opportunity
+5,Pagina web,Opportunity,4,No,No,Primer estado operativo de opportunity
+6,Contrato,Opportunity,5,No,No,"LOI, due diligence y contrato"
+7,Ingreso en cuenta,Opportunity,6,Si,No,Cobro parcial o completo
+8,Descartado,Lead/Opportunity,,Si,No,Estado terminal global; puede ocurrir en cualquier fase
+,,,,,,
+TAREA,,,,,,
+TareaID,Tarea,TipoEntidad,EstadoID,EstadoSugerido,Pendiente Accion / Feedback,Notas
+1,Contactar,Lead,1,Pendiente de contactar,Accion,Inicio del lead
+2,Contactado,Lead,2,En contacto,Feedback,Cambio a En contacto
+3,2ndo contacto,Lead,2,En contacto,Feedback,Mantiene En contacto
+4,Interes en documentacion,Lead,2,Documentacion inicial,Accion,Prepara paso a Documentacion inicial
+5,Enviar documentacion inicial,Lead,3,Documentacion inicial,Accion,Cambio a Documentacion inicial
+6,Pendiente feedback doc. inicial,Lead,3,Documentacion inicial,Feedback,Mantiene Documentacion inicial
+7,Interes en firmar NDA,Lead,4,NDA,Accion,Cambio a NDA
+8,Realizar NDA,Lead,4,NDA,Accion,Mantiene NDA
+9,NDA enviado,Lead,4,NDA,Feedback,Mantiene NDA
+10,Rehacer NDA,Lead,4,NDA,Accion,Reiteracion dentro del ciclo NDA
+11,NDA firmado,Lead,4,NDA,Accion,Hito de conversion de Lead a Opportunity
+12,Acceso web financiacion enviado,Opportunity,5,Pagina web,Feedback,Primer paso ya en Opportunity
+13,Cuestiones relacionadas con la web,Opportunity,5,Pagina web,Accion,Mantiene Pagina web
+14,Interes financiacion confirmado,Opportunity,5,Contrato,Accion,Prepara Contrato
+15,Enviar LOI,Opportunity,6,Contrato,Accion,Inicio del proceso contractual
+16,Feedback LOI,Opportunity,6,Contrato,Feedback,Mantiene Contrato
+17,Rehacer LOI,Opportunity,6,Contrato,Accion,Reiteracion dentro de LOI
+18,LOI firmada,Opportunity,6,Contrato,Accion,Habilita Due Diligence
+19,Due Diligence,Opportunity,6,Contrato,Accion,Actividad dedicada dentro de Contrato
+20,Contrato de financiacion enviado,Opportunity,6,Contrato,Feedback,Inicio del ciclo contractual
+21,Negociacion contrato,Opportunity,6,Contrato,Accion,Mantiene Contrato
+22,Contrato de financiacion firmado,Opportunity,6,Contrato,Accion,Prepara ingreso en cuenta
+23,Anticipo en cuenta registrado,Opportunity,7,Ingreso en cuenta,Accion,Cambio a Ingreso en cuenta
+24,Pago completo en cuenta registrado,Opportunity,7,Ingreso en cuenta,Accion,Cierre financiero
+25,No interesado,Opportunity,8,Descartado,,Cierre perdido en cualquier fase
+,,,,,,
+NOTAS,,,,,,
+1,Lead,,,,,Se usa hasta NDA incluido
+2,Opportunity,,,,,Nace al superar el hito NDA firmado
+3,Producto,,,,,Se mantiene como dimension aparte; no forma parte de esta jerarquia
+4,Modelo simplificado,,,,,Se elimina Actividad y la Tarea queda ligada directamente al Estado

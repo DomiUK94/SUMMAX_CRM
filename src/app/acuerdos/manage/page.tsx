@@ -10,10 +10,10 @@ export default async function ManageDealsPage() {
   }
 
   return (
-    <AppShell title="Modificar datos negocios" subtitle="Edicion masiva" canViewGlobal={user.can_view_global_dashboard}>
+    <AppShell title="Modificar productos" subtitle="Edición masiva" canViewGlobal={user.can_view_global_dashboard}>
       <div className="card">
-        <p>Esta pantalla queda preparada para edicion masiva de negocios.</p>
-        <p className="muted">Siguiente paso: habilitar edicion inline por columna.</p>
+        <p>Esta pantalla queda preparada para edición masiva del catálogo de productos.</p>
+        <p className="muted">Siguiente paso: habilitar edición inline sobre `dim.product`.</p>
       </div>
     </AppShell>
   );

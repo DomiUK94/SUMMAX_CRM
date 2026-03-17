@@ -7,14 +7,14 @@ import { EntityFilesPanel } from "@/components/entity-files-panel";
 import { ContactProfileEditDialog } from "@/components/contact-profile-edit-dialog";
 import { CrmIcon } from "@/components/ui/crm-icon";
 import { requireUser } from "@/lib/auth/session";
-import { addComment, changeContactStatus, getContactById, updateContactProfile } from "@/lib/db/crm";
+import { getBusinessContextForContact } from "@/lib/db/business";
+import { addComment, getContactById, updateContactProfile } from "@/lib/db/crm";
 import { deleteEntityFile, listEntityFilesWithUrls, normalizeEntityFileError, uploadEntityFile } from "@/lib/db/entity-files";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
-
 type PageProps = {
   params: { id: string };
-  searchParams?: { ok?: string; error?: string };
+  searchParams?: { ok?: string; error?: string; tab?: string };
 };
 
 function formatDateTime(value: string | null | undefined) {
@@ -22,17 +22,23 @@ function formatDateTime(value: string | null | undefined) {
   return new Date(value).toLocaleString("es-ES");
 }
 
+function formatMoney(value: number | null) {
+  if (value === null) return "--";
+  return new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency: "EUR",
+    maximumFractionDigits: 0
+  }).format(value);
+}
+
 export default async function ContactDetailPage({ params, searchParams }: PageProps) {
   const user = await requireUser();
   const data = await getContactById(params.id);
   const db = createSourceCrmServerClient();
-  const [tagLinksRes, activitiesRes, dealsRes, auditRes] = await Promise.all([
+  const [tagLinksRes, auditRes, business] = await Promise.all([
     db.from("entity_tags").select("tag_id, tags(id, name, color)").eq("entity_type", "contact").eq("entity_id", params.id),
-    db.from("activities").select("id, title, activity_type, occurred_at, body").eq("entity_type", "contact").eq("entity_id", Number(params.id)).order("occurred_at", { ascending: false }).limit(8),
-    data.contact?.investor_id
-      ? db.from("inversion").select("company_id, compania, prioridad, inversion_maxima, updated_at").eq("company_id", Number(data.contact.investor_id)).limit(5)
-      : Promise.resolve({ data: [] }),
-    db.from("audit_log").select("id, field, old_value, new_value, action, changed_by_email, changed_at").eq("entity_type", "contact").eq("entity_id", params.id).order("changed_at", { ascending: false }).limit(12)
+    db.from("audit_log").select("id, field, old_value, new_value, action, changed_by_email, changed_at").eq("entity_type", "contact").eq("entity_id", params.id).order("changed_at", { ascending: false }).limit(12),
+    getBusinessContextForContact(params.id)
   ]);
 
   async function addCommentAction(formData: FormData) {
@@ -53,28 +59,6 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
     redirect(`/contacts/${params.id}?ok=note`);
   }
 
-  async function changeStatusAction(formData: FormData) {
-    "use server";
-    const actor = await requireUser();
-    const to_status_name = String(formData.get("to_status_name") ?? "");
-    const follow_up_date = String(formData.get("follow_up_date") ?? "").trim();
-    const note = String(formData.get("note") ?? "").trim();
-    if (!to_status_name || !follow_up_date) return;
-
-    await changeContactStatus({
-      contact_id: params.id,
-      to_status_name,
-      follow_up_date,
-      note,
-      actor_user_id: actor.id,
-      actor_email: actor.email
-    });
-
-    revalidatePath(`/contacts/${params.id}`);
-    revalidatePath("/contacts");
-    redirect(`/contacts/${params.id}?ok=status`);
-  }
-
   async function updateContactAction(formData: FormData) {
     "use server";
     const actor = await requireUser();
@@ -88,7 +72,6 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
         other_contact: String(formData.get("other_contact") ?? "").trim() || undefined,
         linkedin: String(formData.get("linkedin") ?? "").trim() || undefined,
         comments: String(formData.get("comments") ?? "").trim() || undefined,
-        status_name: String(formData.get("status_name") ?? "").trim() || undefined,
         actor_user_id: actor.id,
         actor_email: actor.email
       });
@@ -161,8 +144,6 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
   }
 
   const contact = data.contact;
-  const activities = activitiesRes.data ?? [];
-  const deals = dealsRes.data ?? [];
   const tags = tagLinksRes.data ?? [];
   const auditRows = auditRes.data ?? [];
   const comments = data.comments;
@@ -175,10 +156,10 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
     .join("");
 
   const quickActions = [
-    { label: "Nota", icon: "report" as const, href: "#contact-notes" },
+    { label: "Nota", icon: "report" as const, href: `/contacts/${encodeURIComponent(params.id)}?tab=activities#contact-notes` },
     { label: "Correo", icon: "mail" as const, href: contact.email ? `mailto:${contact.email}` : undefined },
     { label: "LinkedIn", icon: "linkedin" as const, href: contact.linkedin ? contact.linkedin : undefined },
-    { label: "Tarea", icon: "task" as const, href: `/actividades/new?contact_id=${encodeURIComponent(params.id)}${contact.investor_id ? `&investor_id=${encodeURIComponent(contact.investor_id)}` : ""}` },
+    { label: "Tarea", icon: "task" as const, href: `/actividades?section=new&contact_id=${encodeURIComponent(params.id)}` },
     { label: "Mas", icon: "more" as const, href: contact.investor_id ? `/investors/${encodeURIComponent(contact.investor_id)}` : undefined }
   ];
 
@@ -191,14 +172,8 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
       }]
     : [];
 
-  const closedDeals = deals.filter((deal) => {
-    const signal = `${deal.prioridad ?? ""} ${deal.compania ?? ""}`.toLowerCase();
-    return signal.includes("cerrado") || signal.includes("ganado") || signal.includes("closed") || signal.includes("won");
-  });
-
   const contactDefaults = {
     full_name: contact.full_name,
-    status_name: contact.status_name ?? "",
     email: contact.email ?? "",
     phone: contact.phone ?? "",
     role: contact.role ?? "",
@@ -262,7 +237,8 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
               <div><span>Correo</span><strong>{contact.email ?? "-"}</strong></div>
               <div><span>Numero de telefono</span><strong>{contact.phone ?? "-"}</strong></div>
               <div><span>Nombre de la empresa</span><strong>{contact.investor_name ?? "-"}</strong></div>
-              <div><span>Estado del lead</span><strong>{contact.status_name ?? "-"}</strong></div>
+              <div><span>Leads asociados</span><strong>{business.leads.length}</strong></div>
+              <div><span>Opportunities asociadas</span><strong>{business.opportunities.length}</strong></div>
               <div><span>Otro contacto</span><strong>{contact.other_contact ?? "-"}</strong></div>
               <div><span>Propietario del contacto</span><strong>{contact.owner_email ?? "Sin propietario"}</strong></div>
             </div>
@@ -273,7 +249,6 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
           defaults={contactDefaults}
           info={{
             name: contact.full_name,
-            status: contact.status_name ?? "--",
             email: contact.email ?? "--",
             phone: contact.phone ?? "--",
             role: contact.role ?? "--",
@@ -281,25 +256,21 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
             linkedin: contact.linkedin ?? "--",
             comments: contact.comments ?? "--"
           }}
-          closedDeals={closedDeals.map((deal) => ({
-            id: String(deal.company_id),
-            name: deal.compania ?? "--",
-            priority: deal.prioridad ?? "--",
-            amount: deal.inversion_maxima ?? "--"
-          }))}
+          closedDeals={business.opportunities
+            .filter((opportunity) => opportunity.resolution === "won")
+            .map((opportunity) => ({
+              id: opportunity.id,
+              name: opportunity.name,
+              priority: opportunity.productName,
+              amount: formatMoney(opportunity.closedAmount)
+            }))}
           comments={comments.map((comment) => ({
             id: comment.id,
             createdBy: comment.created_by_email ?? "-",
             createdAt: formatDateTime(comment.created_at),
             body: comment.body
           }))}
-          activities={activities.map((activity) => ({
-            id: String(activity.id),
-            title: activity.title ?? "(sin titulo)",
-            type: activity.activity_type ?? "--",
-            occurredAt: formatDateTime(activity.occurred_at),
-            body: activity.body ?? ""
-          }))}
+          activities={business.timeline}
           auditRows={auditRows.map((row) => ({
             id: String(row.id),
             field: row.field ?? "general",
@@ -314,11 +285,13 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
             linkedin: contact.linkedin ?? "--",
             comments: contact.comments ?? "--",
             tags: tags.length > 0 ? tags.map((row) => ((row.tags as { name?: string } | null)?.name ?? "Tag")).join(", ") : "--",
-            lastActivity: activities[0]?.occurred_at ? formatDateTime(activities[0].occurred_at) : "--"
+            lastActivity: business.timeline[0]?.occurredAt ?? "--",
+            leads: String(business.leads.length),
+            opportunities: String(business.opportunities.length)
           }}
           updateAction={updateContactAction}
-          changeStatusAction={changeStatusAction}
           addCommentAction={addCommentAction}
+          initialTab={searchParams?.tab}
         />
 
         <aside className="contact-record-right stack">
@@ -357,23 +330,33 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
             <summary className="contact-record-mini-summary">
               <div className="contact-record-mini-title">
                 <CrmIcon name="chevron_down" className="crm-icon" />
-                <span>Negocios ({deals.length})</span>
+                <span>Leads ({business.leads.length})</span>
               </div>
-              <details className="contact-record-mini-menu">
-                <summary className="contact-record-mini-action">Agregar</summary>
-                <div className="contact-record-mini-menu-list">
-                  <Link href={contact.investor_id ? `/acuerdos/new?investor_id=${encodeURIComponent(contact.investor_id)}&contact_id=${encodeURIComponent(params.id)}` : `/acuerdos/new?contact_id=${encodeURIComponent(params.id)}`} className="contact-record-mini-menu-item">Agregar nuevo</Link>
-                  <Link href="/acuerdos" className="contact-record-mini-menu-item">Agregar existente</Link>
-                </div>
-              </details>
             </summary>
             <div className="contact-record-mini-body">
-              {deals.length > 0 ? deals.map((deal) => (
-                <div key={deal.company_id} className="contact-record-mini-item">
-                  <strong>{deal.compania}</strong>
-                  <span>{deal.prioridad ?? "Sin prioridad"} | {deal.inversion_maxima ?? "Sin ticket"}</span>
-                </div>
-              )) : <p className="muted">Sin negocios asociados.</p>}
+              {business.leads.length > 0 ? business.leads.map((lead) => (
+                <Link key={lead.id} href={`/acuerdos/leads/${encodeURIComponent(lead.id)}`} className="contact-record-mini-item">
+                  <strong>{lead.name}</strong>
+                  <span>{lead.stateName} · {lead.resolution}</span>
+                </Link>
+              )) : <p className="muted">Sin leads asociados.</p>}
+            </div>
+          </details>
+
+          <details className="contact-record-mini-panel" open>
+            <summary className="contact-record-mini-summary">
+              <div className="contact-record-mini-title">
+                <CrmIcon name="chevron_down" className="crm-icon" />
+                <span>Opportunities ({business.opportunities.length})</span>
+              </div>
+            </summary>
+            <div className="contact-record-mini-body">
+              {business.opportunities.length > 0 ? business.opportunities.map((opportunity) => (
+                <Link key={opportunity.id} href={`/acuerdos/opportunities/${encodeURIComponent(opportunity.id)}`} className="contact-record-mini-item">
+                  <strong>{opportunity.name}</strong>
+                  <span>{opportunity.productName} · {opportunity.stateName}</span>
+                </Link>
+              )) : <p className="muted">Sin opportunities asociadas.</p>}
             </div>
           </details>
 

@@ -15,7 +15,7 @@ import {
 } from "@tanstack/react-table";
 import type { ListedContact } from "@/lib/db/crm";
 import { usePersistedState } from "@/lib/ui/use-persisted-state";
-import { useSavedViews } from "@/lib/ui/use-saved-views";
+import { useUserColumnVisibility } from "@/lib/ui/use-user-column-visibility";
 import { DataTable } from "@/components/ui/data-table";
 import { CrmIcon } from "@/components/ui/crm-icon";
 
@@ -26,7 +26,6 @@ type ColumnKey =
   | "id"
   | "full_name"
   | "investor_name"
-  | "status_name"
   | "owner_email"
   | "owner_user_id"
   | "email"
@@ -47,7 +46,6 @@ const DATA_COLUMN_ORDER: ColumnKey[] = [
   "id",
   "full_name",
   "investor_name",
-  "status_name",
   "owner_email",
   "owner_user_id",
   "email",
@@ -65,7 +63,6 @@ const COLUMN_LABELS: Record<ColumnKey, string> = {
   id: "ID",
   full_name: "Contacto",
   investor_name: "Compa\u00f1ia",
-  status_name: "Prioridad",
   owner_email: "Propietario contacto",
   owner_user_id: "ID propietario",
   email: "Email",
@@ -81,25 +78,10 @@ const COLUMN_LABELS: Record<ColumnKey, string> = {
 
 const FOLLOW_UP_OPTIONS = ["rojo", "ambar", "verde"] as const;
 
-const STATUS_OPTIONS = [
-  "Alta",
-  "Media",
-  "Baja",
-  "Pendiente de contactar",
-  "En contacto",
-  "NDA en curso",
-  "Revision financiera",
-  "Interes confirmado",
-  "Contrato en curso",
-  "Cerrado",
-  "Descartado"
-];
-
 const DEFAULT_COLUMNS: VisibilityState = {
   id: false,
   full_name: true,
   investor_name: true,
-  status_name: true,
   owner_email: true,
   owner_user_id: false,
   email: false,
@@ -140,9 +122,8 @@ function displayValue(contact: ListedContact, key: ColumnKey): string {
   return raw == null || raw === "" ? "--" : String(raw);
 }
 
-function fieldSavedMessage(field: "owner_user_id" | "prioritario" | "email" | "telefono") {
+function fieldSavedMessage(field: "owner_user_id" | "email" | "telefono") {
   if (field === "owner_user_id") return "Propietario actualizado.";
-  if (field === "prioritario") return "Prioridad actualizada.";
   if (field === "email") return "Email actualizado.";
   return "Telefono actualizado.";
 }
@@ -166,10 +147,9 @@ export function ContactsTable({
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [inlineBusyKey, setInlineBusyKey] = useState<string | null>(null);
   const [assignError, setAssignError] = useState<string | null>(null);
-  const [selectedViewId, setSelectedViewId] = useState("");
   const [viewMode, setViewMode] = usePersistedState<ContactsViewMode>(`${prefix}:view_mode`, "table");
   const [quickFilter, setQuickFilter] = usePersistedState<ContactsQuickFilter>(`${prefix}:quick_filter`, "all");
-  const [columnVisibility, setColumnVisibility] = usePersistedState<VisibilityState>(`${prefix}:columns`, DEFAULT_COLUMNS);
+  const { columnVisibility, setColumnVisibility } = useUserColumnVisibility("contacts", `${prefix}:columns`, DEFAULT_COLUMNS);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [quickViewContact, setQuickViewContact] = useState<ListedContact | null>(null);
   const [phonePreviewOpen, setPhonePreviewOpen] = useState(false);
@@ -189,39 +169,10 @@ export function ContactsTable({
     setToast({ message, tone });
   }
 
-  const savedViews = useSavedViews({
-    module: "contacts",
-    currentFilters: {
-      columnFiltersApplied,
-      quickFilter,
-      viewMode,
-      columns: columnVisibility
-    },
-    onApply: (filters) => {
-      const nextColumnFilters =
-        filters.columnFiltersApplied && typeof filters.columnFiltersApplied === "object"
-          ? (filters.columnFiltersApplied as ColumnFilterState)
-          : {};
-      const nextQuick =
-        filters.quickFilter === "all" || filters.quickFilter === "needs_action" || filters.quickFilter === "critical"
-          ? filters.quickFilter
-          : "all";
-      const nextView = filters.viewMode === "timeline" ? "timeline" : "table";
-      const nextColumns = (filters.columns as VisibilityState) ?? DEFAULT_COLUMNS;
-      setColumnFiltersDraft(nextColumnFilters);
-      setColumnFiltersApplied(nextColumnFilters);
-      setQuickFilter(nextQuick);
-      setViewMode(nextView);
-      setColumnVisibility(nextColumns);
-      showToast("Vista aplicada.", "success");
-    }
-  });
-
   const filteredContacts = useMemo(() => {
     const matchesColumnFilter = (contact: ListedContact, key: ColumnKey, rawValue: string) => {
       const value = rawValue.trim().toLowerCase();
       if (!value) return true;
-      if (key === "status_name") return (contact.status_name ?? "").toLowerCase() === value;
       if (key === "owner_email") return (contact.owner_user_id ?? "") === rawValue;
       if (key === "follow_up_status") return followUpLevel(contact.updated_at) === value;
       return displayValue(contact, key).toLowerCase().includes(value);
@@ -266,7 +217,7 @@ export function ContactsTable({
     }
   }
 
-  async function updateInline(contactId: string, field: "owner_user_id" | "prioritario" | "email" | "telefono", value: string) {
+  async function updateInline(contactId: string, field: "owner_user_id" | "email" | "telefono", value: string) {
     const key = `${contactId}:${field}`;
     if (inlineBusyKey) return;
     setInlineBusyKey(key);
@@ -368,25 +319,6 @@ export function ContactsTable({
         id: "investor_name",
         header: COLUMN_LABELS.investor_name,
         cell: ({ row }) => displayValue(row.original, "investor_name")
-      },
-      {
-        accessorKey: "status_name",
-        id: "status_name",
-        header: COLUMN_LABELS.status_name,
-        cell: ({ row }) => (
-          <select
-            defaultValue={row.original.status_name ?? ""}
-            disabled={inlineBusyKey === `${row.original.id}:prioritario`}
-            onChange={(event) => updateInline(row.original.id, "prioritario", event.target.value)}
-          >
-            <option value="">--</option>
-            {STATUS_OPTIONS.map((status) => (
-              <option key={status} value={status}>
-                {status}
-              </option>
-            ))}
-          </select>
-        )
       },
       {
         accessorKey: "owner_email",
@@ -532,28 +464,12 @@ export function ContactsTable({
               <option value="table">Tabla</option>
               <option value="timeline">Timeline</option>
             </select>
-            <select
-              value={selectedViewId}
-              onChange={(event) => {
-                const id = event.target.value;
-                setSelectedViewId(id);
-                if (!id) return;
-                savedViews.applyView(id);
-              }}
-            >
-              <option value="">{savedViews.loading ? "Cargando vistas..." : "Vistas guardadas"}</option>
-              {savedViews.views.map((view) => (
-                <option key={view.id} value={view.id}>
-                  {view.name}
-                </option>
-              ))}
-            </select>
           </div>
 
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <button type="button" className="entity-toolbar-trigger">
-                <span className="toolbar-button-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span><span>Acciones</span>
+                <span className="toolbar-button-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span><span>+ / - Columnas</span>
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
@@ -568,31 +484,6 @@ export function ContactsTable({
                   ))}
                 </div>
                 <DropdownMenu.Separator className="radix-menu-separator" />
-                <DropdownMenu.Item
-                  className="radix-menu-item"
-                  onSelect={async (event) => {
-                    event.preventDefault();
-                    const name = window.prompt("Nombre de la vista");
-                    if (!name) return;
-                    await savedViews.saveCurrent(name);
-                    showToast("Vista guardada.", "success");
-                  }}
-                >
-                  Guardar vista
-                </DropdownMenu.Item>
-                <DropdownMenu.Item
-                  className="radix-menu-item"
-                  disabled={!selectedViewId}
-                  onSelect={async (event) => {
-                    event.preventDefault();
-                    if (!selectedViewId) return;
-                    await savedViews.deleteView(selectedViewId);
-                    setSelectedViewId("");
-                    showToast("Vista eliminada.", "info");
-                  }}
-                >
-                  Eliminar vista
-                </DropdownMenu.Item>
                 <DropdownMenu.Item
                   className="radix-menu-item"
                   onSelect={(event) => {
@@ -698,7 +589,7 @@ export function ContactsTable({
                 </span>
               </div>
               <div className="muted">
-                {row.original.investor_name ?? "--"} | Propietario: {row.original.owner_email ?? "Sin propietario"} | Prioridad: {row.original.status_name ?? "--"}
+                {row.original.investor_name ?? "--"} | Propietario: {row.original.owner_email ?? "Sin propietario"}
               </div>
             </motion.article>
           ))}
@@ -713,7 +604,6 @@ export function ContactsTable({
               id: <input value={columnFiltersDraft.id ?? ""} onChange={(event) => updateColumnFilter("id", event.target.value)} placeholder="Filtrar" />,
               full_name: <input value={columnFiltersDraft.full_name ?? ""} onChange={(event) => updateColumnFilter("full_name", event.target.value)} placeholder="Filtrar" />,
               investor_name: <input value={columnFiltersDraft.investor_name ?? ""} onChange={(event) => updateColumnFilter("investor_name", event.target.value)} placeholder="Filtrar" />,
-              status_name: <select value={columnFiltersDraft.status_name ?? ""} onChange={(event) => updateColumnFilter("status_name", event.target.value)}><option value="">Todas</option>{STATUS_OPTIONS.map((status) => <option key={status} value={status}>{status}</option>)}</select>,
               owner_email: <select value={columnFiltersDraft.owner_email ?? ""} onChange={(event) => updateColumnFilter("owner_email", event.target.value)}><option value="">Todos</option>{owners.map((owner) => <option key={owner.id} value={owner.id}>{owner.full_name?.trim() || owner.email}</option>)}</select>,
               owner_user_id: <input value={columnFiltersDraft.owner_user_id ?? ""} onChange={(event) => updateColumnFilter("owner_user_id", event.target.value)} placeholder="Filtrar" />,
               email: <input value={columnFiltersDraft.email ?? ""} onChange={(event) => updateColumnFilter("email", event.target.value)} placeholder="Filtrar" />,
@@ -808,8 +698,8 @@ export function ContactsTable({
                     <strong>{quickViewContact.owner_email ?? "Sin propietario"}</strong>
                   </div>
                   <div className="contact-quick-sheet-item">
-                    <span>Prioridad</span>
-                    <strong>{quickViewContact.status_name ?? "Sin prioridad"}</strong>
+                    <span>Compañía</span>
+                    <strong>{quickViewContact.investor_name ?? "Sin compañía"}</strong>
                   </div>
                 </div>
 

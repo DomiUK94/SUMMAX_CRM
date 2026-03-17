@@ -72,13 +72,15 @@ export async function AppShell({
   subtitle,
   children,
   canViewGlobal,
-  showHeader = true
+  showHeader = true,
+  headerActions
 }: {
   title: string;
   subtitle?: string;
   children: React.ReactNode;
   canViewGlobal: boolean;
   showHeader?: boolean;
+  headerActions?: React.ReactNode;
 }) {
   const auth = createSupabaseServerClient();
   const sourcecrm = createSourceCrmServerClient();
@@ -102,7 +104,7 @@ export async function AppShell({
       items: [
         { href: "/contacts", label: "Contactos", icon: "contacts" },
         { href: "/investors", label: "Compañias", icon: "companies" },
-        { href: "/actividades", label: "Actividades", icon: "activity" },
+        { href: "/actividades", label: "Tareas", icon: "activity" },
         { href: "/acuerdos", label: "Negocios", icon: "deals" },
         { href: "/archivos", label: "Archivos", icon: "report" },
         { href: "/search", label: "B\u00fasqueda global", icon: "search" }
@@ -157,6 +159,7 @@ export async function AppShell({
               {subtitle ? <p className="muted">{subtitle}</p> : null}
             </div>
             <div className="workspace-header-actions">
+              {headerActions}
               <WorkspaceQuickLinks />
             </div>
           </header>

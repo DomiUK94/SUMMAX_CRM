@@ -4,9 +4,8 @@ import { AppShell } from "@/components/app-shell";
 import { StaticTable } from "@/components/ui/static-table";
 import { canAccessUsersProvisioning, canManageUsers } from "@/lib/auth/permissions";
 import { requireUser } from "@/lib/auth/session";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createSourceCrmAdminClient } from "@/lib/supabase/sourcecrm-admin";
 
 type SearchProps = {
   searchParams?: {
@@ -58,7 +57,7 @@ export default async function UsuariosPage({ searchParams }: SearchProps) {
       redirect(`/usuarios?error=${encodeURIComponent(created.error?.message ?? "auth_create_failed")}`);
     }
 
-    const db = createSourceCrmServerClient();
+    const db = createSourceCrmAdminClient();
     const profile = await db.from("users").upsert(
       {
         id: created.data.user.id,
@@ -93,7 +92,7 @@ export default async function UsuariosPage({ searchParams }: SearchProps) {
     const isActive = String(formData.get("is_active") ?? "true") === "true";
     if (!targetId) return;
 
-    const db = createSourceCrmServerClient();
+    const db = createSourceCrmAdminClient();
     await db
       .from("users")
       .update({
@@ -124,7 +123,7 @@ export default async function UsuariosPage({ searchParams }: SearchProps) {
       redirect("/usuarios?error=public_user_required");
     }
 
-    const supabase = createSupabaseServerClient();
+    const supabase = createSupabaseAdminClient();
     const { data: publicUser, error: publicUserError } = await supabase
       .from("users")
       .select("id, email, full_name")
@@ -134,7 +133,7 @@ export default async function UsuariosPage({ searchParams }: SearchProps) {
       redirect(`/usuarios?error=${encodeURIComponent(publicUserError?.message ?? "public_user_not_found")}`);
     }
 
-    const db = createSourceCrmServerClient();
+    const db = createSourceCrmAdminClient();
     const profile = await db.from("users").upsert(
       {
         id: publicUser.id,
@@ -156,14 +155,14 @@ export default async function UsuariosPage({ searchParams }: SearchProps) {
     redirect("/usuarios?ok=user_linked");
   }
 
-  const db = createSourceCrmServerClient();
+  const db = createSourceCrmAdminClient();
   const { data: users } = await db
     .from("users")
     .select("id, email, full_name, role, is_active, can_view_global_dashboard, created_at")
     .order("created_at", { ascending: false })
     .limit(300);
 
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseAdminClient();
   const { data: publicUsers } = await supabase
     .from("users")
     .select("id, email, full_name")

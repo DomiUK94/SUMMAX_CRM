@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canManageUsers } from "@/lib/auth/permissions";
-import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
+import { createSourceCrmAdminClient } from "@/lib/supabase/sourcecrm-admin";
 
 function toCsv(rows: Record<string, unknown>[]): string {
   if (rows.length === 0) return "";
@@ -23,10 +23,10 @@ function toCsv(rows: Record<string, unknown>[]): string {
 
 export async function GET(request: Request) {
   const appUser = await getCurrentUser();
-  const sourceCrm = createSourceCrmServerClient();
   if (!canManageUsers(appUser)) {
     return NextResponse.redirect(new URL("/forbidden", request.url));
   }
+  const sourceCrm = createSourceCrmAdminClient();
 
   const url = new URL(request.url);
   const mode = url.searchParams.get("mode") === "detail" ? "detail" : "general";
@@ -34,7 +34,7 @@ export async function GET(request: Request) {
   if (mode === "detail") {
     const { data } = await sourceCrm
       .from("contactos")
-      .select("contact_id, company_id, compania, persona_contacto, rol, email, telefono, linkedin, comentarios, prioritario, updated_at")
+      .select("contact_id, company_id, compania, persona_contacto, rol, email, telefono, linkedin, comentarios, updated_at")
       .order("updated_at", { ascending: false })
       .limit(20000);
 

@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": ".tmp-tests",
+    "rootDir": ".",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "target": "ES2022",
+    "jsx": "react-jsx",
+    "incremental": false
+  },
+  "include": ["tests/**/*.ts", "src/lib/db/pipeline-logic.ts", "src/lib/security/**/*.ts"]
+}

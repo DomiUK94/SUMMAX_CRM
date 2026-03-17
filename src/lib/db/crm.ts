@@ -35,7 +35,6 @@ export type ContactInput = {
   comments?: string;
   owner_user_id?: string;
   owner_email?: string;
-  status_name?: string;
   next_step?: string;
   due_date?: string;
   actor_user_id?: string;
@@ -96,7 +95,7 @@ export async function listContacts() {
   const supabase = createSourceCrmServerClient();
   const { data } = await supabase
     .from("contactos")
-    .select("contact_id, persona_contacto, email, telefono, compania, prioritario, updated_at")
+    .select("contact_id, persona_contacto, email, telefono, compania, updated_at")
     .order("updated_at", { ascending: false })
     .limit(150);
   return (data ?? []).map((row) => ({
@@ -104,7 +103,7 @@ export async function listContacts() {
     full_name: row.persona_contacto ?? "(sin nombre)",
     email: row.email,
     phone: row.telefono,
-    status_name: row.prioritario,
+    status_name: null,
     due_date: null,
     next_step: null,
     investor_name: row.compania
@@ -172,7 +171,7 @@ export async function listContactsPage(params: {
   let filteredQuery = supabase
     .from("contactos")
     .select(
-      "contact_id, persona_contacto, email, telefono, rol, otro_contacto, linkedin, comentarios, compania, prioritario, owner_user_id, owner_email, updated_at",
+      "contact_id, persona_contacto, email, telefono, rol, otro_contacto, linkedin, comentarios, compania, owner_user_id, owner_email, updated_at",
       {
         count: "exact"
       }
@@ -195,7 +194,7 @@ export async function listContactsPage(params: {
 
   if (hasSearch) {
     filteredQuery = filteredQuery.or(
-      `persona_contacto.ilike.${searchPattern},compania.ilike.${searchPattern},prioritario.ilike.${searchPattern},owner_email.ilike.${searchPattern}`
+      `persona_contacto.ilike.${searchPattern},compania.ilike.${searchPattern},owner_email.ilike.${searchPattern}`
     );
   }
 
@@ -211,12 +210,12 @@ export async function listContactsPage(params: {
   if (ownerColumnsMissing) {
     let fallbackQuery = supabase
       .from("contactos")
-      .select("contact_id, persona_contacto, email, telefono, rol, otro_contacto, linkedin, comentarios, compania, prioritario, updated_at", { count: "exact" })
+      .select("contact_id, persona_contacto, email, telefono, rol, otro_contacto, linkedin, comentarios, compania, updated_at", { count: "exact" })
       .order("updated_at", { ascending: false });
 
     if (hasSearch) {
       fallbackQuery = fallbackQuery.or(
-        `persona_contacto.ilike.${searchPattern},compania.ilike.${searchPattern},prioritario.ilike.${searchPattern}`
+        `persona_contacto.ilike.${searchPattern},compania.ilike.${searchPattern}`
       );
     }
 
@@ -261,7 +260,7 @@ export async function listContactsPage(params: {
     other_contact: row.otro_contacto ?? null,
     linkedin: row.linkedin ?? null,
     comments: row.comentarios ?? null,
-    status_name: row.prioritario,
+    status_name: null,
     due_date: null,
     next_step: null,
     investor_name: row.compania,
@@ -398,8 +397,6 @@ export async function createContact(input: ContactInput) {
   const safeOtherContact = normalizeOptionalText(input.other_contact, 120);
   const safeLinkedin = normalizeOptionalText(input.linkedin, 250);
   const safeComments = normalizeOptionalText(input.comments, 1000);
-  const safeStatus = normalizeOptionalText(input.status_name, 120);
-
   const { data: inversion } = await supabase
     .from("inversion")
     .select("compania")
@@ -419,7 +416,6 @@ export async function createContact(input: ContactInput) {
       otro_contacto: safeOtherContact,
       linkedin: safeLinkedin,
       comentarios: safeComments,
-      prioritario: safeStatus,
       owner_user_id: input.owner_user_id ?? null,
       owner_email: input.owner_email ?? null
     })
@@ -483,7 +479,7 @@ export async function getInvestorById(id: string) {
     id: String(c.contact_id),
     full_name: c.persona_contacto ?? "(sin nombre)",
     email: c.email,
-    status_name: c.prioritario
+        status_name: null
   }));
 
   const comments =
@@ -524,7 +520,7 @@ export async function getContactById(id: string) {
         owner_user_id: data.owner_user_id ?? null,
         owner_email: data.owner_email ?? null,
         updated_at: data.updated_at ?? null,
-        status_name: data.prioritario
+        status_name: null
       }
     : null;
 
@@ -632,7 +628,6 @@ export async function updateContactProfile(input: {
   other_contact?: string;
   linkedin?: string;
   comments?: string;
-  status_name?: string;
   actor_user_id: string;
   actor_email: string;
 }) {
@@ -646,7 +641,6 @@ export async function updateContactProfile(input: {
     otro_contacto: normalizeOptionalText(input.other_contact, 120),
     linkedin: normalizeOptionalText(input.linkedin, 250),
     comentarios: normalizeOptionalText(input.comments, 1000),
-    prioritario: normalizeOptionalText(input.status_name, 120),
     updated_at: new Date().toISOString()
   };
 
@@ -700,42 +694,5 @@ export async function attachContactToInvestor(params: {
     metadata: payload
   });
 }
-
-export async function changeContactStatus(params: {
-  contact_id: string;
-  to_status_name: string;
-  follow_up_date: string;
-  note?: string;
-  actor_user_id: string;
-  actor_email: string;
-}) {
-  const supabase = createSourceCrmServerClient();
-  const { data: current } = await supabase.from("contactos").select("comentarios").eq("contact_id", Number(params.contact_id)).single();
-  const nextActionPart = " next_action=" + params.follow_up_date;
-  const notePart = params.note ? " [" + params.note + "]" : "";
-  const statusComment = "status=" + params.to_status_name + nextActionPart + notePart;
-  const nextComments = [current?.comentarios ?? "", statusComment].filter(Boolean).join(" | ");
-
-  const { error } = await supabase
-    .from("contactos")
-    .update({
-      prioritario: params.to_status_name,
-      comentarios: nextComments,
-      updated_at: new Date().toISOString()
-    })
-    .eq("contact_id", Number(params.contact_id));
-  if (error) throw error;
-  await writeAuditEntry({
-    entityType: "contact",
-    entityId: params.contact_id,
-    action: "status_change",
-    changedByUserId: params.actor_user_id,
-    changedByEmail: params.actor_email,
-    field: "prioritario",
-    newValue: params.to_status_name,
-    metadata: { follow_up_date: params.follow_up_date, note: params.note ?? null }
-  });
-}
-
 
 

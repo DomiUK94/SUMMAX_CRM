@@ -2,8 +2,10 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { canManageCrmBulkEdits } from "@/lib/auth/permissions";
 import { requireUser } from "@/lib/auth/session";
-import { ENTITY_FILES_BUCKET, normalizeEntityFileError, uploadEntityFile } from "@/lib/db/entity-files";
+import { DRAFT_FILES_BUCKET, createSignedDownloadUrl, normalizeEntityFileError, uploadEntityFile } from "@/lib/db/entity-files";
+import { validateAttachmentFile } from "@/lib/security/files";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
@@ -26,6 +28,7 @@ type FileRow = {
   entity_type: "contact" | "investor";
   entity_id: string;
   file_name: string;
+  storage_bucket: string;
   storage_path: string;
   uploaded_by_email: string | null;
   created_at: string;
@@ -35,6 +38,7 @@ type FileRow = {
 type DraftFileRow = {
   id: string;
   file_name: string;
+  storage_bucket: string;
   storage_path: string;
   uploaded_by_email: string | null;
   created_at: string;
@@ -66,8 +70,9 @@ function buildDraftStoragePath(language: "es" | "en", fileName: string) {
 export default async function ArchivosPage({ searchParams }: SearchProps) {
   const user = await requireUser();
   const db = createSourceCrmServerClient();
-  const storage = createSupabaseServerClient().storage.from(ENTITY_FILES_BUCKET);
-  const activeSection = normalizeSection(searchParams?.section);
+  const canManageDrafts = canManageCrmBulkEdits(user);
+  const requestedSection = normalizeSection(searchParams?.section);
+  const activeSection = requestedSection === "drafts" && !canManageDrafts ? "attachments" : requestedSection;
   const showDraftUpload = activeSection === "drafts" && searchParams?.draft_action === "upload";
   const showAttachmentUpload = activeSection === "attachments" && searchParams?.attach_action === "upload";
 
@@ -81,13 +86,15 @@ export default async function ArchivosPage({ searchParams }: SearchProps) {
       redirect("/archivos?section=drafts&draft_action=upload&error=file_missing");
     }
 
-    if (file.size > 25 * 1024 * 1024) {
-      redirect("/archivos?section=drafts&draft_action=upload&error=file_too_large");
+    try {
+      validateAttachmentFile(file);
+    } catch (error) {
+      redirect(`/archivos?section=drafts&draft_action=upload&error=${normalizeEntityFileError(error)}`);
     }
 
     const storagePath = buildDraftStoragePath(language, file.name);
     const supabase = createSupabaseServerClient();
-    const draftStorage = supabase.storage.from(ENTITY_FILES_BUCKET);
+    const draftStorage = supabase.storage.from(DRAFT_FILES_BUCKET);
 
     const uploadResult = await draftStorage.upload(storagePath, Buffer.from(await file.arrayBuffer()), {
       contentType: file.type || "application/octet-stream",
@@ -102,7 +109,7 @@ export default async function ArchivosPage({ searchParams }: SearchProps) {
       .from("draft_files")
       .insert({
         file_name: file.name,
-        storage_bucket: ENTITY_FILES_BUCKET,
+        storage_bucket: DRAFT_FILES_BUCKET,
         storage_path: storagePath,
         mime_type: file.type || null,
         size_bytes: file.size,
@@ -155,12 +162,12 @@ export default async function ArchivosPage({ searchParams }: SearchProps) {
   const [draftsRes, filesRes, contactsRes, investorsRes] = await Promise.all([
     db
       .from("draft_files")
-      .select("id, file_name, storage_path, uploaded_by_email, created_at, size_bytes, language")
+      .select("id, file_name, storage_bucket, storage_path, uploaded_by_email, created_at, size_bytes, language")
       .order("created_at", { ascending: false })
       .limit(200),
     db
       .from("entity_files")
-      .select("id, entity_type, entity_id, file_name, storage_path, uploaded_by_email, created_at, size_bytes")
+      .select("id, entity_type, entity_id, file_name, storage_bucket, storage_path, uploaded_by_email, created_at, size_bytes")
       .order("created_at", { ascending: false })
       .limit(200),
     db.from("contactos").select("contact_id, persona_contacto").order("persona_contacto", { ascending: true }).limit(200),
@@ -201,12 +208,12 @@ export default async function ArchivosPage({ searchParams }: SearchProps) {
   const fileLinks = new Map<string, string>();
   await Promise.all([
     ...drafts.map(async (file) => {
-      const signed = await storage.createSignedUrl(file.storage_path, 60 * 60);
-      if (signed.data?.signedUrl) draftLinks.set(file.id, signed.data.signedUrl);
+      const signedUrl = await createSignedDownloadUrl(file.storage_bucket, file.storage_path);
+      if (signedUrl) draftLinks.set(file.id, signedUrl);
     }),
     ...files.map(async (file) => {
-      const signed = await storage.createSignedUrl(file.storage_path, 60 * 60);
-      if (signed.data?.signedUrl) fileLinks.set(file.id, signed.data.signedUrl);
+      const signedUrl = await createSignedDownloadUrl(file.storage_bucket, file.storage_path);
+      if (signedUrl) fileLinks.set(file.id, signedUrl);
     })
   ]);
 
@@ -214,7 +221,9 @@ export default async function ArchivosPage({ searchParams }: SearchProps) {
     <AppShell title="Archivos" subtitle="Borradores, adjuntos y carga centralizada" canViewGlobal={user.can_view_global_dashboard}>
       <div className="stack">
         <div className="smart-tabs-row" role="tablist" aria-label="Secciones de archivos">
-          <Link href="/archivos?section=drafts" className={activeSection === "drafts" ? "smart-tab smart-tab-active" : "smart-tab"}>Borrador Archivos</Link>
+          {canManageDrafts ? (
+            <Link href="/archivos?section=drafts" className={activeSection === "drafts" ? "smart-tab smart-tab-active" : "smart-tab"}>Borrador Archivos</Link>
+          ) : null}
           <Link href="/archivos?section=attachments" className={activeSection === "attachments" ? "smart-tab smart-tab-active" : "smart-tab"}>Archivos Adjuntos</Link>
         </div>
 
@@ -222,10 +231,11 @@ export default async function ArchivosPage({ searchParams }: SearchProps) {
         {searchParams?.ok === "file_uploaded" ? <div className="notice notice-success">Archivo subido correctamente.</div> : null}
         {searchParams?.error === "file_missing" ? <div className="notice notice-error">Selecciona un archivo.</div> : null}
         {searchParams?.error === "file_too_large" ? <div className="notice notice-error">El archivo supera el limite permitido.</div> : null}
+        {searchParams?.error === "file_type_not_allowed" ? <div className="notice notice-error">Tipo de archivo no permitido.</div> : null}
         {searchParams?.error === "invalid_target" ? <div className="notice notice-error">Selecciona una compania o un contacto.</div> : null}
         {searchParams?.error === "file_upload_failed" ? <div className="notice notice-error">No se pudo subir el archivo.</div> : null}
 
-        {activeSection === "drafts" ? (
+        {activeSection === "drafts" && canManageDrafts ? (
           <section className="card stack draft-files-shell">
             <div className="draft-files-hero">
               <div>
@@ -251,7 +261,7 @@ export default async function ArchivosPage({ searchParams }: SearchProps) {
                   </label>
                   <label className="form-field">
                     <span>Archivo borrador</span>
-                    <input type="file" name="file" required />
+                    <input type="file" name="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.csv,.doc,.docx,.xls,.xlsx,.ppt,.pptx" required />
                   </label>
                   <div className="draft-files-upload-submit">
                     <button type="submit">Subir borrador</button>
@@ -345,7 +355,7 @@ export default async function ArchivosPage({ searchParams }: SearchProps) {
                 </label>
                 <label className="form-field">
                   <span>Archivo</span>
-                  <input type="file" name="file" required />
+                  <input type="file" name="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.txt,.csv,.doc,.docx,.xls,.xlsx,.ppt,.pptx" required />
                 </label>
                 <div>
                   <button type="submit">Subir archivo</button>

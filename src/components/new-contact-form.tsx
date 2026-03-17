@@ -131,10 +131,6 @@ export function NewContactForm({
               <input name="linkedin" placeholder="https://linkedin.com/in/..." />
             </label>
             <label className="form-field">
-              <span>Estado</span>
-              <input name="status_name" placeholder="Nuevo, En progreso..." />
-            </label>
-            <label className="form-field">
               <span>Propietario</span>
               <select name="assign_owner" defaultValue="yes">
                 <option value="yes">Asignarme como propietario</option>

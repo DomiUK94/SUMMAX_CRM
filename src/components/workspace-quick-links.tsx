@@ -14,10 +14,6 @@ export function WorkspaceQuickLinks() {
           <span className="quick-pill-icon" aria-hidden="true"><CrmIcon name="plus" className="crm-icon" /></span>
           <span>Nuevo</span>
         </Link>
-        <Link href="/contacts/manage" className="quick-pill quick-pill-ghost">
-          <span className="quick-pill-icon" aria-hidden="true"><CrmIcon name="edit" className="crm-icon" /></span>
-          <span>Modificar</span>
-        </Link>
         <Link href="/contacts/duplicates" className="quick-pill quick-pill-danger">
           <span className="quick-pill-icon" aria-hidden="true"><CrmIcon name="warning" className="crm-icon" /></span>
           <span>Posibles duplicados</span>
@@ -32,10 +28,6 @@ export function WorkspaceQuickLinks() {
         <Link href="/investors/new" className="quick-pill">
           <span className="quick-pill-icon" aria-hidden="true"><CrmIcon name="plus" className="crm-icon" /></span>
           <span>Nueva</span>
-        </Link>
-        <Link href="/investors/manage" className="quick-pill quick-pill-ghost">
-          <span className="quick-pill-icon" aria-hidden="true"><CrmIcon name="edit" className="crm-icon" /></span>
-          <span>Modificar</span>
         </Link>
       </div>
     );

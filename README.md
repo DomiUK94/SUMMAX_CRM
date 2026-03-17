@@ -1,39 +1,33 @@
-﻿# SUMMAX CRM
+# SUMMAX CRM
 
-CRM interno para gestion de fondos/inversores y contactos.
+CRM interno de SUMMAX para compañías, contactos y pipeline comercial.
 
-## Estado implementado
-- Auth con email/password (Supabase) y perfil de usuario interno.
-- Permisos con rol y flag `can_view_global_dashboard`.
-- Dashboard personal y dashboard general (restringido por flag).
-- CRUD base de fondos/contactos.
-- Comentarios por fondo/contacto.
-- Cambio de estado en contacto con historial.
-- Importacion de `.xlsx` (prioridad) y `.csv` canonico.
-- Export CSV general y detallado.
-- UX desktop-only (`>=1280px`).
-- Plan funcional documentado en `docs/plan/`.
+## Estado actual
+- Auth con Supabase y perfil interno de usuario.
+- Gestión de contactos y compañías.
+- Pipeline de `Lead` y `Oportunidad`.
+- Tareas comerciales con historial en `pipeline_event`.
+- Tareas iniciales de prospección en `prospect_tasks`.
+- Persistencia por usuario de columnas visibles en contactos, compañías y negocios.
+- Importación desde Excel/CSV.
+- Exportación CSV y búsqueda transversal.
 
 ## Setup local
 1. Instala Node.js 20+.
 2. Ejecuta `npm install`.
-3. Copia `.env.example` a `.env.local` y completa:
+3. Crea `.env.local` con:
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY` (si la usas en admin scripts)
-4. Aplica migraciones SQL:
-   - `supabase/migrations/20260212_phase1_auth.sql`
-   - `supabase/migrations/20260212_phase2_core.sql`
-   - `supabase/migrations/20260217_phase3_sourcecrm_restructure.sql`
-5. Arranca desarrollo con `npm run dev`.
+   - `SUPABASE_SERVICE_ROLE_KEY`
+4. Aplica las migraciones de `supabase/migrations/` en orden.
+5. Arranca con `npm run dev`.
+6. Provisiona el primer admin CRM con `npm run security:provision-admin -- --email=tu.usuario@empresa.com`.
 
 ## Notas
-- El primer usuario que haga login se promueve automaticamente a `admin` y obtiene acceso al dashboard general.
-- Si no hay sesion, las rutas protegidas redirigen a `/login`.
+- El acceso admin inicial ya no se concede en el login. Se provisiona de forma explícita con `npm run security:provision-admin`.
+- Las rutas protegidas redirigen a `/login` si no hay sesión.
+- La tabla `saved_views` ya no expone UI de vistas guardadas; solo conserva la preferencia técnica `__columns__` por usuario y módulo.
 - Scripts SQL auxiliares:
   - `supabase/scripts/sourcecrm_truncate.sql`
   - `supabase/scripts/drop_legacy_investors_contacts.sql`
-  - `supabase/scripts/load_sourcecrm_from_excel.sql` (generado por script Python)
-- Carga desde Excel `260217 Mapping SUMMAX.xlsx`:
-  - `python scripts/load_sourcecrm_from_excel.py "260217 Mapping SUMMAX.xlsx" --truncate-first`
-
+  - `supabase/scripts/load_sourcecrm_from_excel.sql`

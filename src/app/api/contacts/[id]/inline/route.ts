@@ -6,7 +6,7 @@ import { normalizeDateInput, normalizeEmail, normalizeOptionalText, normalizePho
 import { writeAuditEntry } from "@/lib/db/audit";
 
 type InlinePayload = {
-  field?: "owner_user_id" | "prioritario" | "next_action_date" | "email" | "telefono";
+  field?: "owner_user_id" | "next_action_date" | "email" | "telefono";
   value?: string | null;
 };
 
@@ -23,7 +23,7 @@ export async function PATCH(request: Request, context: { params: { id: string } 
   const db = createSourceCrmServerClient();
   const { data: current, error: currentError } = await db
     .from("contactos")
-    .select("contact_id, owner_user_id, owner_email, prioritario, comentarios, email, telefono")
+    .select("contact_id, owner_user_id, owner_email, comentarios, email, telefono")
     .eq("contact_id", contactId)
     .maybeSingle();
   if (currentError) return NextResponse.json({ error: currentError.message }, { status: 500 });
@@ -48,13 +48,6 @@ export async function PATCH(request: Request, context: { params: { id: string } 
       oldValue = current.owner_user_id;
       newValue = owner.id;
     }
-  }
-
-  if (field === "prioritario") {
-    const status = normalizeOptionalText(payload?.value, 80);
-    patch.prioritario = status;
-    oldValue = current.prioritario;
-    newValue = status;
   }
 
   if (field === "email") {
@@ -86,7 +79,7 @@ export async function PATCH(request: Request, context: { params: { id: string } 
   await writeAuditEntry({
     entityType: "contact",
     entityId: String(contactId),
-    action: field === "prioritario" ? "status_change" : "update",
+    action: "update",
     changedByUserId: user.id,
     changedByEmail: user.email,
     field,

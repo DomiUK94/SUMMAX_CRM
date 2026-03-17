@@ -1,5 +1,6 @@
-﻿import { redirect } from "next/navigation";
 import Image from "next/image";
+import { redirect } from "next/navigation";
+import { sanitizeRedirectPath } from "@/lib/security/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
@@ -26,7 +27,7 @@ export default function LoginPage({ searchParams }: SearchProps) {
 
     const email = String(formData.get("email") ?? "").trim();
     const password = String(formData.get("password") ?? "");
-    const next = String(formData.get("next") ?? "/dashboard/me");
+    const next = sanitizeRedirectPath(String(formData.get("next") ?? "/dashboard/me"));
 
     const supabase = createSupabaseServerClient();
     const sourcecrm = createSourceCrmServerClient();
@@ -35,60 +36,43 @@ export default function LoginPage({ searchParams }: SearchProps) {
       redirect("/login?error=invalid_credentials");
     }
 
-    const { count: usersCount } = await sourcecrm.from("users").select("id", { count: "exact", head: true });
-    const isFirstUser = (usersCount ?? 0) === 0;
-    let profileError: { code?: string; message?: string; details?: string | null; hint?: string | null } | null = null;
+    const { data: profile, error: readProfileError } = await sourcecrm
+      .from("users")
+      .select("id, is_active")
+      .eq("id", data.user.id)
+      .maybeSingle();
 
-    if (isFirstUser) {
-      const result = await sourcecrm.from("users").upsert(
-        {
-          id: data.user.id,
-          email: data.user.email ?? email,
-          role: "admin",
-          can_view_global_dashboard: true,
-          is_active: true,
-          updated_at: new Date().toISOString()
-        },
-        { onConflict: "id" }
-      );
-      profileError = result.error;
-    } else {
-      const { data: profile, error: readProfileError } = await sourcecrm
-        .from("users")
-        .select("id, is_active")
-        .eq("id", data.user.id)
-        .maybeSingle();
-      profileError = readProfileError;
-      if (!profile) {
-        redirect("/login?error=forbidden&reason=not_in_crm_users");
-      }
-      if (!profile.is_active) {
-        redirect("/login?error=forbidden&reason=user_inactive");
-      }
-      await sourcecrm
-        .from("users")
-        .update({
-          email: data.user.email ?? email,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", data.user.id);
-    }
-
-    if (profileError) {
-      console.error("profile_sync_failed", {
-        code: profileError.code,
-        message: profileError.message,
-        details: profileError.details,
-        hint: profileError.hint
-      });
-      const reasonRaw = [profileError.code, profileError.message, profileError.details, profileError.hint]
-        .filter(Boolean)
-        .join(" | ");
-      const reason = encodeURIComponent(reasonRaw || "unknown");
+    if (readProfileError) {
+      await supabase.auth.signOut();
+      const reason = encodeURIComponent(readProfileError.message || "unknown");
       redirect(`/login?error=profile_sync_failed&reason=${reason}`);
     }
 
-    redirect(next.startsWith("/") ? next : "/dashboard/me");
+    if (!profile) {
+      await supabase.auth.signOut();
+      redirect("/login?error=forbidden&reason=not_in_crm_users");
+    }
+
+    if (!profile.is_active) {
+      await supabase.auth.signOut();
+      redirect("/login?error=forbidden&reason=user_inactive");
+    }
+
+    const updateResult = await sourcecrm
+      .from("users")
+      .update({
+        email: data.user.email ?? email,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", data.user.id);
+
+    if (updateResult.error) {
+      await supabase.auth.signOut();
+      const reason = encodeURIComponent(updateResult.error.message || "unknown");
+      redirect(`/login?error=profile_sync_failed&reason=${reason}`);
+    }
+
+    redirect(next);
   }
 
   const errorMessage = formatError(searchParams?.error, searchParams?.reason);
@@ -105,7 +89,7 @@ export default function LoginPage({ searchParams }: SearchProps) {
         </div>
         {errorMessage ? <p className="login-error">{errorMessage}</p> : null}
         <form action={login} className="login-form stack">
-          <input type="hidden" name="next" value={searchParams?.next ?? "/dashboard/me"} />
+          <input type="hidden" name="next" value={sanitizeRedirectPath(searchParams?.next, "/dashboard/me")} />
           <label className="stack">
             <span>Email</span>
             <input name="email" required type="email" placeholder="nombre@summax.com" autoComplete="email" />

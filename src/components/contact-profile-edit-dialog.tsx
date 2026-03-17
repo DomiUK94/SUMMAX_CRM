@@ -8,7 +8,6 @@ type Props = {
   action: (formData: FormData) => void | Promise<void>;
   defaults: {
     full_name: string;
-    status_name: string;
     email: string;
     phone: string;
     role: string;
@@ -46,10 +45,6 @@ export function ContactProfileEditDialog({ action, defaults, iconOnly = false }:
             <label className="form-field company-detail-field-span-2">
               <span>Nombre</span>
               <input name="full_name" defaultValue={defaults.full_name} required />
-            </label>
-            <label className="form-field">
-              <span>Estado</span>
-              <input name="status_name" defaultValue={defaults.status_name} />
             </label>
             <label className="form-field">
               <span>Email</span>

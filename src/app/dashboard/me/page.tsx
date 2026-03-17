@@ -29,26 +29,25 @@ export default async function MyDashboardPage({
   async function assignOwnerAction(formData: FormData) {
     "use server";
     await requireUser();
-    const contactId = String(formData.get("contact_id") ?? "");
+    const entityType = String(formData.get("entity_type") ?? "");
+    const entityId = String(formData.get("entity_id") ?? "");
     const ownerUserId = String(formData.get("owner_user_id") ?? "");
-    if (!contactId || !ownerUserId) return;
+    if (!entityId || !ownerUserId) return;
 
     const db = createSourceCrmServerClient();
     const { data: owner } = await db.from("users").select("email").eq("id", ownerUserId).single();
     const ownerEmail = owner?.email ?? "";
     if (!ownerEmail) return;
 
-    await db
-      .from("contactos")
-      .update({
-        owner_user_id: ownerUserId,
-        owner_email: ownerEmail,
-        updated_at: new Date().toISOString()
-      })
-      .eq("contact_id", Number(contactId));
+    const targetTable = entityType === "opportunity" ? "opportunities" : "leads";
+    await db.from(targetTable).update({
+      owner_user_id: ownerUserId,
+      owner_email: ownerEmail,
+      updated_at: new Date().toISOString()
+    }).eq("id", entityId);
 
     revalidatePath("/dashboard/me");
-    revalidatePath("/contacts");
+    revalidatePath("/acuerdos");
   }
 
   const queue = focus === "unassigned" ? data.unassignedQueue : data.queue;
@@ -59,7 +58,7 @@ export default async function MyDashboardPage({
         <aside className="dashboard-kpi-rail">
           <Link href={kpiHref("none")} className="card dashboard-kpi-card dashboard-kpi-card-compact">
             <span className="dashboard-kpi-icon" aria-hidden="true"><CrmIcon name="contacts" className="crm-icon" /></span>
-            <span>Mis contactos</span>
+            <span>Mis negocios</span>
             <strong>{data.totals.myContacts}</strong>
           </Link>
           <Link href={kpiHref("stale")} className="card dashboard-kpi-card dashboard-kpi-card-compact">
@@ -79,8 +78,8 @@ export default async function MyDashboardPage({
           </Link>
           <Link href={kpiHref("none")} className="card dashboard-kpi-card dashboard-kpi-card-compact">
             <span className="dashboard-kpi-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span>
-            <span>Prioridad alta</span>
-            <strong>{data.totals.highPriorityContacts}</strong>
+            <span>Negocio abierto</span>
+            <strong>{data.totals.openBusinessCount}</strong>
           </Link>
         </aside>
 
@@ -93,16 +92,17 @@ export default async function MyDashboardPage({
             <Link href="/contacts" className="quick-pill quick-pill-ghost"><span className="quick-pill-icon" aria-hidden="true"><CrmIcon name="contacts" className="crm-icon" /></span><span>Abrir CRM</span></Link>
           </div>
           <StaticTable
-            columns={["Contacto", "Compañía", "Estado", "Último avance", "Días sin acción", "Acción"]}
+            columns={["Negocio", "Compañía", "Estado", "Último avance", "Días sin acción", "Acción"]}
             rows={queue.map((item) => [
               item.full_name,
               item.investor_name ?? "-",
-              item.status_name ?? "-",
+              item.state_name ?? "-",
               item.next_step ?? "-",
               String(item.days_without_action),
               focus === "unassigned" ? (
                 <form action={assignOwnerAction} className="row" style={{ justifyContent: "start", gap: 8 }}>
-                  <input type="hidden" name="contact_id" value={item.id} />
+                  <input type="hidden" name="entity_type" value={item.entity_type} />
+                  <input type="hidden" name="entity_id" value={item.id} />
                   <select name="owner_user_id" defaultValue="">
                     <option value="">Seleccionar responsable</option>
                     {(users ?? []).map((u) => (
@@ -114,7 +114,10 @@ export default async function MyDashboardPage({
                   <button type="submit">Asignar</button>
                 </form>
               ) : (
-                <Link href={`/contacts/${encodeURIComponent(item.id)}`} className="contacts-tab">
+                <Link
+                  href={item.entity_type === "lead" ? `/acuerdos/leads/${encodeURIComponent(item.id)}` : `/acuerdos/opportunities/${encodeURIComponent(item.id)}`}
+                  className="contacts-tab"
+                >
                   Abrir y actualizar
                 </Link>
               )

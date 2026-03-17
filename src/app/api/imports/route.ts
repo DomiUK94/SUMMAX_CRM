@@ -1,9 +1,12 @@
 import { NextResponse } from "next/server";
 import * as XLSX from "xlsx";
+import { validateImportFile } from "@/lib/security/files";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canManageUsers } from "@/lib/auth/permissions";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createSourceCrmAdminClient } from "@/lib/supabase/sourcecrm-admin";
+
+export const dynamic = "force-dynamic";
 
 type RowPayload = Record<string, string>;
 
@@ -77,7 +80,7 @@ function detectHeader(rows: string[][]): { index: number; headers: string[] } {
 }
 
 async function upsertInversion(payload: RowPayload, sheetName: string) {
-  const db = createSourceCrmServerClient();
+  const db = createSourceCrmAdminClient();
   const companyId = parseIntOrNull(getByAliases(payload, ["Company_ID", "CompanyID"]));
   if (!companyId) return { inserted: 0, merged: 0, warning: 1, error: 0 };
 
@@ -110,7 +113,7 @@ async function upsertInversion(payload: RowPayload, sheetName: string) {
 }
 
 async function upsertContactos(payload: RowPayload) {
-  const db = createSourceCrmServerClient();
+  const db = createSourceCrmAdminClient();
   const companyId = parseIntOrNull(getByAliases(payload, ["Company_ID", "CompanyID"]));
   const contactId = parseIntOrNull(getByAliases(payload, ["Contact_ID", "ContactID"]));
   if (!companyId || !contactId) return { inserted: 0, merged: 0, warning: 1, error: 0 };
@@ -129,7 +132,6 @@ async function upsertContactos(payload: RowPayload) {
     email: getByAliases(payload, ["email", "Email"]),
     linkedin: getByAliases(payload, ["LinkedIn", "Linkedin"]),
     comentarios: getByAliases(payload, ["Comentarios"]),
-    prioritario: getByAliases(payload, ["Prioritario?"]),
     updated_at: new Date().toISOString()
   };
 
@@ -140,7 +142,7 @@ async function upsertContactos(payload: RowPayload) {
 }
 
 async function upsertTipoFondo(payload: RowPayload) {
-  const db = createSourceCrmServerClient();
+  const db = createSourceCrmAdminClient();
   const companyId = parseIntOrNull(getByAliases(payload, ["Company_ID", "CompanyID"]));
   const tipo = getByAliases(payload, ["Tipo_Fondo", "Tipo Fondo"]);
   if (!companyId || !tipo) return { inserted: 0, merged: 0, warning: 1, error: 0 };
@@ -166,7 +168,7 @@ async function upsertTipoFondo(payload: RowPayload) {
 }
 
 async function upsertSector(payload: RowPayload) {
-  const db = createSourceCrmServerClient();
+  const db = createSourceCrmAdminClient();
   const companyId = parseIntOrNull(getByAliases(payload, ["Company_ID", "CompanyID"]));
   const sector = getByAliases(payload, ["Sector"]);
   if (!companyId || !sector) return { inserted: 0, merged: 0, warning: 1, error: 0 };
@@ -191,7 +193,7 @@ async function upsertSector(payload: RowPayload) {
 }
 
 async function upsertMapaArea(payload: RowPayload) {
-  const db = createSourceCrmServerClient();
+  const db = createSourceCrmAdminClient();
   const companyId = parseIntOrNull(getByAliases(payload, ["Company_ID", "CompanyID"]));
   const area = getByAliases(payload, ["Mercados_Area_Geografica", "Area_Geografica"]);
   if (!companyId || !area) return { inserted: 0, merged: 0, warning: 1, error: 0 };
@@ -234,7 +236,7 @@ export async function POST(request: Request) {
     return NextResponse.redirect(new URL("/forbidden", request.url));
   }
 
-  const supabase = createSupabaseServerClient();
+  const supabase = createSupabaseAdminClient();
 
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
@@ -242,10 +244,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "file_required" }, { status: 400 });
   }
 
-  const sourceType = file.name.toLowerCase().endsWith(".csv") ? "csv" : "xlsx";
-  if (sourceType !== "xlsx") {
-    return NextResponse.json({ error: "xlsx_required_for_sourcecrm_import" }, { status: 400 });
+  try {
+    validateImportFile(file);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "invalid_import_file" }, { status: 400 });
   }
+  const sourceType = "xlsx";
 
   const { data: batch, error: batchError } = await supabase
     .from("import_batches")

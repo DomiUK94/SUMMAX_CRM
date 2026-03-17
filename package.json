@@ -3,11 +3,14 @@
     "version":  "0.1.0",
     "private":  true,
     "scripts":  {
-                    "dev":  "next dev -p 3000",
+                    "dev":  "next dev",
                     "build":  "next build",
-                    "start":  "next start -p 3000",
+                    "start":  "next start",
                     "lint":  "next lint",
-                    "prod":  "next build \u0026\u0026 next start -p 3000",
+                    "test":  "tsc -p tsconfig.test.json && node .tmp-tests/tests/pipeline-logic.test.js && node .tmp-tests/tests/security.test.js",
+                    "security:provision-admin":  "node scripts/provision-crm-admin.mjs",
+                    "db:delete-task-data":  "node scripts/delete-task-data.mjs",
+                    "prod":  "next build \u0026\u0026 next start",
                     "check:text":  "node scripts/check-mojibake.cjs",
                     "prebuild":  "node scripts/check-mojibake.cjs",
                     "predev":  "node scripts/check-mojibake.cjs"
