@@ -2009,6 +2009,20 @@ button {
   margin-top: 4px;
 }
 
+.dashboard-web-user-dialog {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(72vh, 640px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 18px;
+}
+
+.dashboard-web-user-dialog .table-shell,
+.dashboard-web-user-dialog .contacts-table-wrap {
+  max-height: none;
+  overflow: visible;
+}
+
 .bulk-owner-bar,
 .columns-editor,
 .entity-toolbar-menu-panel {

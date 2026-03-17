@@ -343,3 +343,22 @@ export async function getWebDashboardData() {
     rows
   };
 }
+
+export async function getWebUserCardOpenings(userId: string) {
+  const supabase = createSupabaseServerClient();
+  const result = await supabase
+    .from("card_progress")
+    .select("card_id, status, updated_at")
+    .eq("user_id", userId)
+    .eq("status", "viewed")
+    .order("updated_at", { ascending: true });
+
+  if (result.error) throw result.error;
+
+  return (result.data ?? []).map((row, index) => ({
+    id: `${String(row.card_id)}:${String(row.updated_at)}:${index}`,
+    cardId: String(row.card_id),
+    cardLabel: `Carta ${String(row.card_id)}`,
+    openedAt: String(row.updated_at)
+  }));
+}
