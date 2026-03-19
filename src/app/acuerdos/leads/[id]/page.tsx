@@ -6,6 +6,7 @@ import { ChangePipelineStateForm } from "@/components/change-pipeline-state-form
 import { EditLeadForm } from "@/components/edit-lead-form";
 import { LogPipelineTaskForm } from "@/components/log-pipeline-task-form";
 import { requireUser } from "@/lib/auth/session";
+import { toIsoFromDateTimeLocalInput } from "@/lib/datetime";
 import { getLeadById, updateLead } from "@/lib/db/leads";
 import { listProducts } from "@/lib/db/products";
 import { changePipelineState, completePipelineTask, listPipelineEvents } from "@/lib/db/pipeline";
@@ -190,11 +191,13 @@ export default async function LeadDetailPage({
   async function logLeadTaskAction(formData: FormData) {
     "use server";
     const actor = await requireUser();
+    const occurredAt = toIsoFromDateTimeLocalInput(formData.get("occurred_at"));
 
     await completePipelineTask({
       entity_type: "lead",
       lead_id: leadRecord.id,
       task_id: String(formData.get("task_id") ?? "").trim(),
+      occurred_at: occurredAt,
       notes: String(formData.get("notes") ?? "").trim() || null,
       actor_user_id: actor.id,
       actor_email: actor.email

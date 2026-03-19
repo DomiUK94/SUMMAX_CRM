@@ -137,6 +137,20 @@ export function NewContactForm({
                 <option value="no">Sin propietario</option>
               </select>
             </label>
+            <label className="form-field">
+              <span>Es financiador</span>
+              <select name="is_financier" defaultValue="no">
+                <option value="no">No</option>
+                <option value="yes">Si</option>
+              </select>
+            </label>
+            <label className="form-field">
+              <span>Es preescriptor</span>
+              <select name="is_prescriber" defaultValue="no">
+                <option value="no">No</option>
+                <option value="yes">Si</option>
+              </select>
+            </label>
             <label className="form-field contact-new-field-full">
               <span>Comentarios</span>
               <textarea name="comments" rows={5} placeholder="Notas internas..." />

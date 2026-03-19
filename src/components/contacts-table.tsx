@@ -2,67 +2,46 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
 import * as Dialog from "@radix-ui/react-dialog";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   getCoreRowModel,
+  getSortedRowModel,
   type ColumnDef,
   type RowSelectionState,
+  type SortingState,
   type VisibilityState,
   useReactTable
 } from "@tanstack/react-table";
 import type { ListedContact } from "@/lib/db/crm";
+import {
+  CONTACT_COLUMN_FILTER_KEYS,
+  readContactColumnFiltersFromUrlSearchParams,
+  writeContactColumnFiltersToUrlSearchParams,
+  type ContactColumnFilterState,
+  type ContactColumnKey
+} from "@/lib/ui/contact-table-filters";
 import { usePersistedState } from "@/lib/ui/use-persisted-state";
 import { useUserColumnVisibility } from "@/lib/ui/use-user-column-visibility";
+import { ContactEmailDialog } from "@/components/contact-email-dialog";
 import { DataTable } from "@/components/ui/data-table";
 import { CrmIcon } from "@/components/ui/crm-icon";
 
 type OwnerOption = { id: string; email: string; full_name?: string | null };
 type ToastTone = "success" | "error" | "info";
 
-type ColumnKey =
-  | "id"
-  | "full_name"
-  | "investor_name"
-  | "owner_email"
-  | "owner_user_id"
-  | "email"
-  | "phone"
-  | "role"
-  | "other_contact"
-  | "linkedin"
-  | "comments"
-  | "updated_at"
-  | "days_without_action"
-  | "follow_up_status";
-
 type ContactsViewMode = "table" | "timeline";
 type ContactsQuickFilter = "all" | "needs_action" | "critical";
-type ColumnFilterState = Partial<Record<ColumnKey, string>>;
+const DATA_COLUMN_ORDER: ContactColumnKey[] = [...CONTACT_COLUMN_FILTER_KEYS];
 
-const DATA_COLUMN_ORDER: ColumnKey[] = [
-  "id",
-  "full_name",
-  "investor_name",
-  "owner_email",
-  "owner_user_id",
-  "email",
-  "phone",
-  "role",
-  "other_contact",
-  "linkedin",
-  "comments",
-  "updated_at",
-  "days_without_action",
-  "follow_up_status"
-];
-
-const COLUMN_LABELS: Record<ColumnKey, string> = {
+const COLUMN_LABELS: Record<ContactColumnKey, string> = {
   id: "ID",
   full_name: "Contacto",
   investor_name: "Compa\u00f1ia",
+  is_financier: "Es Financiador",
+  is_prescriber: "Es Preescriptor",
   owner_email: "Propietario contacto",
   owner_user_id: "ID propietario",
   email: "Email",
@@ -82,6 +61,8 @@ const DEFAULT_COLUMNS: VisibilityState = {
   id: false,
   full_name: true,
   investor_name: true,
+  is_financier: true,
+  is_prescriber: true,
   owner_email: true,
   owner_user_id: false,
   email: false,
@@ -114,7 +95,7 @@ function followUpLevel(updatedAt: string | null): "rojo" | "ambar" | "verde" {
   return "verde";
 }
 
-function displayValue(contact: ListedContact, key: ColumnKey): string {
+function displayValue(contact: ListedContact, key: ContactColumnKey): string {
   if (key === "updated_at") return contact.updated_at ? new Date(contact.updated_at).toLocaleString("es-ES") : "--";
   if (key === "days_without_action") return String(daysWithoutAction(contact.updated_at));
   if (key === "follow_up_status") return followUpLevel(contact.updated_at);
@@ -128,20 +109,47 @@ function fieldSavedMessage(field: "owner_user_id" | "email" | "telefono") {
   return "Telefono actualizado.";
 }
 
+function SortHeader({
+  label,
+  sortState,
+  onClick
+}: {
+  label: string;
+  sortState: false | "asc" | "desc";
+  onClick: () => void;
+}) {
+  const arrow = sortState === "asc" ? "↑" : sortState === "desc" ? "↓" : "";
+  return (
+    <button type="button" className="business-sort-trigger" onClick={onClick}>
+      <span>{label}</span>
+      <span className="business-sort-indicator" aria-hidden="true">
+        {arrow}
+      </span>
+    </button>
+  );
+}
+
 export function ContactsTable({
   contacts,
   owners,
+  quickCounts,
   storageKeyPrefix
 }: {
   contacts: ListedContact[];
   owners: OwnerOption[];
+  quickCounts?: { needsActionCount: number; criticalCount: number };
   storageKeyPrefix?: string;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const prefix = storageKeyPrefix ?? "contacts";
 
-  const [columnFiltersDraft, setColumnFiltersDraft] = usePersistedState<ColumnFilterState>(`${prefix}:column_filters_draft`, {});
-  const [columnFiltersApplied, setColumnFiltersApplied] = usePersistedState<ColumnFilterState>(`${prefix}:column_filters_applied`, {});
+  const appliedColumnFilters = useMemo(
+    () => readContactColumnFiltersFromUrlSearchParams(new URLSearchParams(searchParams.toString())),
+    [searchParams]
+  );
+  const [columnFiltersDraft, setColumnFiltersDraft] = useState<ContactColumnFilterState>(appliedColumnFilters);
   const [ownerToAssign, setOwnerToAssign] = useState("");
   const [assigning, setAssigning] = useState(false);
   const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
@@ -151,6 +159,7 @@ export function ContactsTable({
   const [quickFilter, setQuickFilter] = usePersistedState<ContactsQuickFilter>(`${prefix}:quick_filter`, "all");
   const { columnVisibility, setColumnVisibility } = useUserColumnVisibility("contacts", `${prefix}:columns`, DEFAULT_COLUMNS);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [sorting, setSorting] = useState<SortingState>([]);
   const [quickViewContact, setQuickViewContact] = useState<ListedContact | null>(null);
   const [phonePreviewOpen, setPhonePreviewOpen] = useState(false);
   const [toast, setToast] = useState<{ tone: ToastTone; message: string } | null>(null);
@@ -165,12 +174,16 @@ export function ContactsTable({
     setPhonePreviewOpen(false);
   }, [quickViewContact?.id]);
 
+  useEffect(() => {
+    setColumnFiltersDraft(appliedColumnFilters);
+  }, [appliedColumnFilters]);
+
   function showToast(message: string, tone: ToastTone = "info") {
     setToast({ message, tone });
   }
 
   const filteredContacts = useMemo(() => {
-    const matchesColumnFilter = (contact: ListedContact, key: ColumnKey, rawValue: string) => {
+    const matchesColumnFilter = (contact: ListedContact, key: ContactColumnKey, rawValue: string) => {
       const value = rawValue.trim().toLowerCase();
       if (!value) return true;
       if (key === "owner_email") return (contact.owner_user_id ?? "") === rawValue;
@@ -179,13 +192,13 @@ export function ContactsTable({
     };
 
     const searched = contacts.filter((contact) =>
-      Object.entries(columnFiltersApplied).every(([key, value]) => matchesColumnFilter(contact, key as ColumnKey, String(value ?? "")))
+      Object.entries(appliedColumnFilters).every(([key, value]) => matchesColumnFilter(contact, key as ContactColumnKey, String(value ?? "")))
     );
 
     if (quickFilter === "needs_action") return searched.filter((contact) => daysWithoutAction(contact.updated_at) > 7);
     if (quickFilter === "critical") return searched.filter((contact) => daysWithoutAction(contact.updated_at) > 14);
     return searched;
-  }, [columnFiltersApplied, contacts, quickFilter]);
+  }, [appliedColumnFilters, contacts, quickFilter]);
 
   async function assignOwnerBulk() {
     const selectedIds = table.getSelectedRowModel().rows.map((row) => row.original.id);
@@ -295,13 +308,14 @@ export function ContactsTable({
       {
         accessorKey: "id",
         id: "id",
-        header: COLUMN_LABELS.id,
-        cell: ({ row }) => row.original.id
+        header: ({ column }) => <SortHeader label={COLUMN_LABELS.id} sortState={column.getIsSorted()} onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
+        cell: ({ row }) => row.original.id,
+        sortingFn: (rowA, rowB) => rowA.original.id.localeCompare(rowB.original.id, "es", { numeric: true, sensitivity: "base" })
       },
       {
         accessorKey: "full_name",
         id: "full_name",
-        header: COLUMN_LABELS.full_name,
+        header: ({ column }) => <SortHeader label={COLUMN_LABELS.full_name} sortState={column.getIsSorted()} onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
         cell: ({ row }) => (
           <div className="contact-name-cell">
             <button
@@ -313,17 +327,33 @@ export function ContactsTable({
               {displayValue(row.original, "full_name")}
             </button>
           </div>
-        )
+        ),
+        sortingFn: (rowA, rowB) => displayValue(rowA.original, "full_name").localeCompare(displayValue(rowB.original, "full_name"), "es", { numeric: true, sensitivity: "base" })
       },
       {
         id: "investor_name",
-        header: COLUMN_LABELS.investor_name,
-        cell: ({ row }) => displayValue(row.original, "investor_name")
+        header: ({ column }) => <SortHeader label={COLUMN_LABELS.investor_name} sortState={column.getIsSorted()} onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
+        cell: ({ row }) => displayValue(row.original, "investor_name"),
+        sortingFn: (rowA, rowB) => displayValue(rowA.original, "investor_name").localeCompare(displayValue(rowB.original, "investor_name"), "es", { numeric: true, sensitivity: "base" })
+      },
+      {
+        accessorKey: "is_financier",
+        id: "is_financier",
+        header: ({ column }) => <SortHeader label={COLUMN_LABELS.is_financier} sortState={column.getIsSorted()} onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
+        cell: ({ row }) => displayValue(row.original, "is_financier"),
+        sortingFn: (rowA, rowB) => displayValue(rowA.original, "is_financier").localeCompare(displayValue(rowB.original, "is_financier"), "es", { numeric: true, sensitivity: "base" })
+      },
+      {
+        accessorKey: "is_prescriber",
+        id: "is_prescriber",
+        header: ({ column }) => <SortHeader label={COLUMN_LABELS.is_prescriber} sortState={column.getIsSorted()} onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
+        cell: ({ row }) => displayValue(row.original, "is_prescriber"),
+        sortingFn: (rowA, rowB) => displayValue(rowA.original, "is_prescriber").localeCompare(displayValue(rowB.original, "is_prescriber"), "es", { numeric: true, sensitivity: "base" })
       },
       {
         accessorKey: "owner_email",
         id: "owner_email",
-        header: COLUMN_LABELS.owner_email,
+        header: ({ column }) => <SortHeader label={COLUMN_LABELS.owner_email} sortState={column.getIsSorted()} onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
         cell: ({ row }) => (
           <select
             defaultValue={row.original.owner_user_id ?? ""}
@@ -337,80 +367,91 @@ export function ContactsTable({
               </option>
             ))}
           </select>
-        )
+        ),
+        sortingFn: (rowA, rowB) => displayValue(rowA.original, "owner_email").localeCompare(displayValue(rowB.original, "owner_email"), "es", { numeric: true, sensitivity: "base" })
       },
       {
         accessorKey: "owner_user_id",
         id: "owner_user_id",
-        header: COLUMN_LABELS.owner_user_id,
-        cell: ({ row }) => displayValue(row.original, "owner_user_id")
+        header: ({ column }) => <SortHeader label={COLUMN_LABELS.owner_user_id} sortState={column.getIsSorted()} onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
+        cell: ({ row }) => displayValue(row.original, "owner_user_id"),
+        sortingFn: (rowA, rowB) => displayValue(rowA.original, "owner_user_id").localeCompare(displayValue(rowB.original, "owner_user_id"), "es", { numeric: true, sensitivity: "base" })
       },
       {
         accessorKey: "email",
         id: "email",
-        header: COLUMN_LABELS.email,
+        header: ({ column }) => <SortHeader label={COLUMN_LABELS.email} sortState={column.getIsSorted()} onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
         cell: ({ row }) => (
           <input
             defaultValue={displayValue(row.original, "email") === "--" ? "" : displayValue(row.original, "email")}
             disabled={inlineBusyKey === `${row.original.id}:email`}
             onBlur={(event) => updateInline(row.original.id, "email", event.currentTarget.value)}
           />
-        )
+        ),
+        sortingFn: (rowA, rowB) => displayValue(rowA.original, "email").localeCompare(displayValue(rowB.original, "email"), "es", { numeric: true, sensitivity: "base" })
       },
       {
         accessorKey: "phone",
         id: "phone",
-        header: COLUMN_LABELS.phone,
+        header: ({ column }) => <SortHeader label={COLUMN_LABELS.phone} sortState={column.getIsSorted()} onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
         cell: ({ row }) => (
           <input
             defaultValue={displayValue(row.original, "phone") === "--" ? "" : displayValue(row.original, "phone")}
             disabled={inlineBusyKey === `${row.original.id}:telefono`}
             onBlur={(event) => updateInline(row.original.id, "telefono", event.currentTarget.value)}
           />
-        )
+        ),
+        sortingFn: (rowA, rowB) => displayValue(rowA.original, "phone").localeCompare(displayValue(rowB.original, "phone"), "es", { numeric: true, sensitivity: "base" })
       },
       {
         accessorKey: "role",
         id: "role",
-        header: COLUMN_LABELS.role,
-        cell: ({ row }) => displayValue(row.original, "role")
+        header: ({ column }) => <SortHeader label={COLUMN_LABELS.role} sortState={column.getIsSorted()} onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
+        cell: ({ row }) => displayValue(row.original, "role"),
+        sortingFn: (rowA, rowB) => displayValue(rowA.original, "role").localeCompare(displayValue(rowB.original, "role"), "es", { numeric: true, sensitivity: "base" })
       },
       {
         accessorKey: "other_contact",
         id: "other_contact",
-        header: COLUMN_LABELS.other_contact,
-        cell: ({ row }) => displayValue(row.original, "other_contact")
+        header: ({ column }) => <SortHeader label={COLUMN_LABELS.other_contact} sortState={column.getIsSorted()} onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
+        cell: ({ row }) => displayValue(row.original, "other_contact"),
+        sortingFn: (rowA, rowB) => displayValue(rowA.original, "other_contact").localeCompare(displayValue(rowB.original, "other_contact"), "es", { numeric: true, sensitivity: "base" })
       },
       {
         accessorKey: "linkedin",
         id: "linkedin",
-        header: COLUMN_LABELS.linkedin,
-        cell: ({ row }) => displayValue(row.original, "linkedin")
+        header: ({ column }) => <SortHeader label={COLUMN_LABELS.linkedin} sortState={column.getIsSorted()} onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
+        cell: ({ row }) => displayValue(row.original, "linkedin"),
+        sortingFn: (rowA, rowB) => displayValue(rowA.original, "linkedin").localeCompare(displayValue(rowB.original, "linkedin"), "es", { numeric: true, sensitivity: "base" })
       },
       {
         accessorKey: "comments",
         id: "comments",
-        header: COLUMN_LABELS.comments,
-        cell: ({ row }) => displayValue(row.original, "comments")
+        header: ({ column }) => <SortHeader label={COLUMN_LABELS.comments} sortState={column.getIsSorted()} onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
+        cell: ({ row }) => displayValue(row.original, "comments"),
+        sortingFn: (rowA, rowB) => displayValue(rowA.original, "comments").localeCompare(displayValue(rowB.original, "comments"), "es", { numeric: true, sensitivity: "base" })
       },
       {
         accessorKey: "updated_at",
         id: "updated_at",
-        header: COLUMN_LABELS.updated_at,
-        cell: ({ row }) => displayValue(row.original, "updated_at")
+        header: ({ column }) => <SortHeader label={COLUMN_LABELS.updated_at} sortState={column.getIsSorted()} onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
+        cell: ({ row }) => displayValue(row.original, "updated_at"),
+        sortingFn: (rowA, rowB) => new Date(rowA.original.updated_at ?? 0).getTime() - new Date(rowB.original.updated_at ?? 0).getTime()
       },
       {
         id: "days_without_action",
-        header: COLUMN_LABELS.days_without_action,
-        cell: ({ row }) => `${daysWithoutAction(row.original.updated_at)} d`
+        header: ({ column }) => <SortHeader label={COLUMN_LABELS.days_without_action} sortState={column.getIsSorted()} onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
+        cell: ({ row }) => `${daysWithoutAction(row.original.updated_at)} d`,
+        sortingFn: (rowA, rowB) => daysWithoutAction(rowA.original.updated_at) - daysWithoutAction(rowB.original.updated_at)
       },
       {
         id: "follow_up_status",
-        header: COLUMN_LABELS.follow_up_status,
+        header: ({ column }) => <SortHeader label={COLUMN_LABELS.follow_up_status} sortState={column.getIsSorted()} onClick={() => column.toggleSorting(column.getIsSorted() === "asc")} />,
         cell: ({ row }) => {
           const level = followUpLevel(row.original.updated_at);
           return <span className={`contact-followup-badge contact-followup-${level}`}>{level.toUpperCase()}</span>;
-        }
+        },
+        sortingFn: (rowA, rowB) => followUpLevel(rowA.original.updated_at).localeCompare(followUpLevel(rowB.original.updated_at), "es", { sensitivity: "base" })
       }
     ],
     [inlineBusyKey, owners]
@@ -421,26 +462,33 @@ export function ContactsTable({
     columns,
     state: {
       columnVisibility,
-      rowSelection
+      rowSelection,
+      sorting
     },
     getRowId: (row) => row.id,
     enableRowSelection: true,
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
-    getCoreRowModel: getCoreRowModel()
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel()
   });
 
   const selectedCount = table.getSelectedRowModel().rows.length;
   const visibleDataColumnCount = DATA_COLUMN_ORDER.filter((key) => table.getColumn(key)?.getIsVisible()).length;
   const timelineRows = table.getRowModel().rows;
-  const needsActionCount = contacts.filter((contact) => daysWithoutAction(contact.updated_at) > 7).length;
-  const criticalCount = contacts.filter((contact) => daysWithoutAction(contact.updated_at) > 14).length;
+  const needsActionCount = quickCounts?.needsActionCount ?? contacts.filter((contact) => daysWithoutAction(contact.updated_at) > 7).length;
+  const criticalCount = quickCounts?.criticalCount ?? contacts.filter((contact) => daysWithoutAction(contact.updated_at) > 14).length;
 
-  function updateColumnFilter(key: ColumnKey, value: string) {
-    setColumnFiltersDraft((current) => ({ ...current, [key]: value }));
-    setColumnFiltersApplied((current) => ({ ...current, [key]: value }));
+  function updateColumnFilter(key: ContactColumnKey, value: string) {
+    const nextFilters = { ...columnFiltersDraft, [key]: value };
+    setColumnFiltersDraft(nextFilters);
+    const params = new URLSearchParams(searchParams.toString());
+    writeContactColumnFiltersToUrlSearchParams(params, nextFilters);
+    params.set("page", "1");
+    router.replace(`${pathname}?${params.toString()}`);
   }
-  function toggleColumn(key: ColumnKey) {
+  function toggleColumn(key: ContactColumnKey) {
     const column = table.getColumn(key);
     if (!column) return;
     if (column.getIsVisible() && visibleDataColumnCount === 1) return;
@@ -468,8 +516,9 @@ export function ContactsTable({
 
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
-              <button type="button" className="entity-toolbar-trigger">
-                <span className="toolbar-button-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span><span>+ / - Columnas</span>
+              <button type="button" className="entity-toolbar-trigger contacts-columns-trigger">
+                <span>+ / - Columnas</span>
+                <span className="toolbar-button-icon" aria-hidden="true"><CrmIcon name="overview" className="crm-icon" /></span>
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
@@ -604,6 +653,8 @@ export function ContactsTable({
               id: <input value={columnFiltersDraft.id ?? ""} onChange={(event) => updateColumnFilter("id", event.target.value)} placeholder="Filtrar" />,
               full_name: <input value={columnFiltersDraft.full_name ?? ""} onChange={(event) => updateColumnFilter("full_name", event.target.value)} placeholder="Filtrar" />,
               investor_name: <input value={columnFiltersDraft.investor_name ?? ""} onChange={(event) => updateColumnFilter("investor_name", event.target.value)} placeholder="Filtrar" />,
+              is_financier: <select value={columnFiltersDraft.is_financier ?? ""} onChange={(event) => updateColumnFilter("is_financier", event.target.value)}><option value="">Todos</option><option value="Si">Si</option><option value="No">No</option></select>,
+              is_prescriber: <select value={columnFiltersDraft.is_prescriber ?? ""} onChange={(event) => updateColumnFilter("is_prescriber", event.target.value)}><option value="">Todos</option><option value="Si">Si</option><option value="No">No</option></select>,
               owner_email: <select value={columnFiltersDraft.owner_email ?? ""} onChange={(event) => updateColumnFilter("owner_email", event.target.value)}><option value="">Todos</option>{owners.map((owner) => <option key={owner.id} value={owner.id}>{owner.full_name?.trim() || owner.email}</option>)}</select>,
               owner_user_id: <input value={columnFiltersDraft.owner_user_id ?? ""} onChange={(event) => updateColumnFilter("owner_user_id", event.target.value)} placeholder="Filtrar" />,
               email: <input value={columnFiltersDraft.email ?? ""} onChange={(event) => updateColumnFilter("email", event.target.value)} placeholder="Filtrar" />,
@@ -674,9 +725,15 @@ export function ContactsTable({
                       </span>
                     )}
                     {quickViewContact.email ? (
-                      <a href={`mailto:${quickViewContact.email}`} className="contact-quick-sheet-contact-button" aria-label="Enviar email">
-                        <CrmIcon name="mail" className="crm-icon" />
-                      </a>
+                      <ContactEmailDialog
+                        email={quickViewContact.email}
+                        title="Correo del contacto"
+                        description="Mostramos el email directamente para evitar abrir aplicaciones externas."
+                      >
+                        <button type="button" className="contact-quick-sheet-contact-button" aria-label="Ver email">
+                          <CrmIcon name="mail" className="crm-icon" />
+                        </button>
+                      </ContactEmailDialog>
                     ) : (
                       <span className="contact-quick-sheet-contact-button contact-quick-sheet-contact-button-disabled" aria-hidden="true">
                         <CrmIcon name="mail" className="crm-icon" />

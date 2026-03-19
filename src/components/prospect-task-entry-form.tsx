@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { TaskOccurredAtField } from "@/components/task-occurred-at-field";
 
 type ContactOption = {
   id: string;
@@ -252,6 +253,8 @@ export function ProspectTaskEntryForm({ title, subtitle, contacts, tasks, taskOc
         <span>Notas</span>
         <textarea name="notes" rows={4} placeholder="Contexto o resultado de la tarea..." />
       </label>
+
+      <TaskOccurredAtField />
 
       <div className="deal-convert-actions">
         <button type="submit" disabled={!selectedContact || isBlocked || !selectedTaskId || (needsReactivationChoice && !reactivationMode)}>

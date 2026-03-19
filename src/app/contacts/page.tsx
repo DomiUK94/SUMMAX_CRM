@@ -4,9 +4,10 @@ import { QueryParamMemory } from "@/components/query-param-memory";
 import { RowsPerPageSelect } from "@/components/rows-per-page-select";
 import { requireUser } from "@/lib/auth/session";
 import { normalizePerPage } from "@/lib/ui/pagination";
+import { readContactColumnFilters, writeContactColumnFiltersToUrlSearchParams, type ContactColumnFilterState } from "@/lib/ui/contact-table-filters";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 import Link from "next/link";
-import { listContactsPage, type ContactsTab } from "@/lib/db/crm";
+import { getContactQuickCounts, listContactsPage, type ContactsTab } from "@/lib/db/crm";
 import { CrmIcon } from "@/components/ui/crm-icon";
 
 const TABS: Array<{ key: ContactsTab; label: string }> = [
@@ -27,26 +28,33 @@ function normalizePage(value: string | undefined): number {
   return Math.trunc(parsed);
 }
 
-function hrefFor(tab: ContactsTab, page: number, perPage: number): string {
-  return `/contacts?tab=${tab}&page=${page}&per_page=${perPage}`;
+function hrefFor(tab: ContactsTab, page: number, perPage: number, columnFilters: ContactColumnFilterState): string {
+  const params = new URLSearchParams();
+  params.set("tab", tab);
+  params.set("page", String(page));
+  params.set("per_page", String(perPage));
+  writeContactColumnFiltersToUrlSearchParams(params, columnFilters);
+  return `/contacts?${params.toString()}`;
 }
 
 export default async function ContactsPage({
   searchParams
 }: {
-  searchParams?: { tab?: string; page?: string; per_page?: string };
+  searchParams?: Record<string, string | string[] | undefined>;
 }) {
   const user = await requireUser();
   const crmDb = createSourceCrmServerClient();
-  const activeTab = normalizeTab(searchParams?.tab);
-  const requestedPage = normalizePage(searchParams?.page);
-  const perPage = normalizePerPage(searchParams?.per_page);
+  const activeTab = normalizeTab(Array.isArray(searchParams?.tab) ? searchParams?.tab[0] : searchParams?.tab);
+  const requestedPage = normalizePage(Array.isArray(searchParams?.page) ? searchParams?.page[0] : searchParams?.page);
+  const perPage = normalizePerPage(Array.isArray(searchParams?.per_page) ? searchParams?.per_page[0] : searchParams?.per_page);
+  const columnFilters = readContactColumnFilters(searchParams);
 
   let { rows: contacts, filteredCount, totalCount } = await listContactsPage({
     tab: activeTab,
     userId: user.id,
     page: requestedPage,
-    pageSize: perPage
+    pageSize: perPage,
+    columnFilters
   });
 
   const totalPages = Math.max(1, Math.ceil(filteredCount / perPage));
@@ -57,7 +65,8 @@ export default async function ContactsPage({
       tab: activeTab,
       userId: user.id,
       page: currentPage,
-      pageSize: perPage
+      pageSize: perPage,
+      columnFilters
     });
     contacts = fallback.rows;
     filteredCount = fallback.filteredCount;
@@ -71,6 +80,11 @@ export default async function ContactsPage({
     listContactsPage({ tab: "unassigned", userId: user.id, page: 1, pageSize: 1 }),
     listContactsPage({ tab: "in_progress", userId: user.id, page: 1, pageSize: 1 })
   ]);
+  const quickCounts = await getContactQuickCounts({
+    tab: activeTab,
+    userId: user.id,
+    columnFilters
+  });
   const tabCounts: Record<ContactsTab, number> = {
     mine: mineCountRes.filteredCount,
     all: totalCount,
@@ -96,7 +110,7 @@ export default async function ContactsPage({
           {TABS.map((tab) => (
             <Link
               key={tab.key}
-              href={hrefFor(tab.key, 1, perPage)}
+              href={hrefFor(tab.key, 1, perPage, columnFilters)}
               className={`contacts-tab ${activeTab === tab.key ? "contacts-tab-active" : ""} ${tab.key === "unassigned" ? "contacts-tab-warning" : ""}`}
             >
               <span className="module-tab-icon" aria-hidden="true"><CrmIcon name={tab.key === "mine" ? "contacts" : tab.key === "all" ? "overview" : tab.key === "unassigned" ? "warning" : "activity"} className="crm-icon" /></span>
@@ -106,11 +120,11 @@ export default async function ContactsPage({
           ))}
         </div>
         <div className="contacts-toolbar card">
-          <ContactsTable contacts={contacts} owners={owners ?? []} storageKeyPrefix={`user:${user.id}:contacts`} />
+          <ContactsTable contacts={contacts} owners={owners ?? []} quickCounts={quickCounts} storageKeyPrefix={`user:${user.id}:contacts`} />
 
           <div className="contacts-pagination">
             {hasPrev ? (
-              <Link href={hrefFor(activeTab, currentPage - 1, perPage)} className="contacts-tab">
+              <Link href={hrefFor(activeTab, currentPage - 1, perPage, columnFilters)} className="contacts-tab">
                 Anterior
               </Link>
             ) : (
@@ -118,7 +132,7 @@ export default async function ContactsPage({
             )}
             <span className="contacts-page-current">{currentPage}</span>
             {hasNext ? (
-              <Link href={hrefFor(activeTab, currentPage + 1, perPage)} className="contacts-tab">
+              <Link href={hrefFor(activeTab, currentPage + 1, perPage, columnFilters)} className="contacts-tab">
                 Siguiente
               </Link>
             ) : (

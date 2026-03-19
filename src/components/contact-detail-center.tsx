@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ContactProfileEditDialog } from "@/components/contact-profile-edit-dialog";
+import { TaskOccurredAtField } from "@/components/task-occurred-at-field";
 
 type ContactDefaults = {
   full_name: string;
@@ -11,6 +12,11 @@ type ContactDefaults = {
   other_contact: string;
   linkedin: string;
   comments: string;
+  is_financier: string;
+  is_prescriber: string;
+  owner_user_id: string;
+  next_step: string;
+  due_date: string;
 };
 
 type DealItem = {
@@ -52,6 +58,7 @@ type TagItem = {
 
 type Props = {
   defaults: ContactDefaults;
+  owners: Array<{ id: string; email: string }>;
   info: {
     name: string;
     email: string;
@@ -59,6 +66,8 @@ type Props = {
     role: string;
     otherContact: string;
     linkedin: string;
+    isFinancier: string;
+    isPrescriber: string;
     comments: string;
   };
   closedDeals: DealItem[];
@@ -89,6 +98,7 @@ function normalizeContactTab(value: string | undefined): ContactTab {
 
 export function ContactDetailCenter({
   defaults,
+  owners,
   info,
   closedDeals,
   comments,
@@ -131,7 +141,7 @@ export function ContactDetailCenter({
               <p className="workspace-kicker">{"Informaci\u00f3n"}</p>
             </div>
             <div className="company-profile-actions">
-              <ContactProfileEditDialog action={updateAction} defaults={defaults} />
+              <ContactProfileEditDialog action={updateAction} defaults={defaults} owners={owners} />
             </div>
           </div>
 
@@ -141,6 +151,8 @@ export function ContactDetailCenter({
             <div className="company-profile-item"><span>{"Tel\u00e9fono"}</span><strong>{info.phone}</strong></div>
             <div className="company-profile-item"><span>Rol</span><strong>{info.role}</strong></div>
             <div className="company-profile-item"><span>Otro contacto</span><strong>{info.otherContact}</strong></div>
+            <div className="company-profile-item"><span>Es financiador</span><strong>{info.isFinancier}</strong></div>
+            <div className="company-profile-item"><span>Es preescriptor</span><strong>{info.isPrescriber}</strong></div>
             <div className="company-profile-item"><span>LinkedIn</span><strong>{info.linkedin}</strong></div>
             <div className="company-profile-item contact-profile-item-wide"><span>Comentarios</span><strong>{info.comments}</strong></div>
           </div>
@@ -159,6 +171,7 @@ export function ContactDetailCenter({
           <div id="contact-notes" className="company-note-list stack">
             <form action={addCommentAction} className="stack">
               <textarea name="body" rows={4} placeholder={"A\u00f1adir nota interna..."} />
+              <TaskOccurredAtField />
               <button type="submit">Guardar nota</button>
             </form>
             {activities.map((activity) => (
@@ -202,7 +215,7 @@ export function ContactDetailCenter({
               <h3>{"Datos adicionales del contacto"}</h3>
             </div>
             <div className="company-profile-actions">
-              <ContactProfileEditDialog action={updateAction} defaults={defaults} />
+              <ContactProfileEditDialog action={updateAction} defaults={defaults} owners={owners} />
             </div>
           </div>
 

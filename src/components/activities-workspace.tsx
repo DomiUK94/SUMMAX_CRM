@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { ProspectTaskEntryForm } from "@/components/prospect-task-entry-form";
 import { TaskContactHistoryTable } from "@/components/task-contact-history-table";
+import { CrmIcon } from "@/components/ui/crm-icon";
 import { requireUser } from "@/lib/auth/session";
+import { toIsoFromDateTimeLocalInput } from "@/lib/datetime";
 import { completePipelineTask } from "@/lib/db/pipeline";
 import {
   convertProspectToLead,
@@ -77,6 +79,7 @@ type ContactRow = {
   persona_contacto: string | null;
   owner_user_id: string | null;
   owner_email: string | null;
+  es_preescriptor: boolean | null;
 };
 
 type CompanyRow = {
@@ -188,7 +191,8 @@ export async function ActivitiesWorkspace(props: {
         .limit(160),
       source
         .from("contactos")
-        .select("contact_id, company_id, persona_contacto, owner_user_id, owner_email")
+        .select("contact_id, company_id, persona_contacto, owner_user_id, owner_email, es_preescriptor")
+        .eq("es_preescriptor", true)
         .order("updated_at", { ascending: false })
         .limit(260),
       source.from("inversion").select("company_id, compania").order("updated_at", { ascending: false }).limit(260),
@@ -210,7 +214,7 @@ export async function ActivitiesWorkspace(props: {
   const events = (eventsRes.data ?? []) as EventRow[];
   const leads = (leadsRes.data ?? []) as LeadRow[];
   const opportunities = (opportunitiesRes.data ?? []) as OpportunityRow[];
-  const contacts = (contactsRes.data ?? []) as ContactRow[];
+  const contacts = ((contactsRes.data ?? []) as ContactRow[]).filter((contact) => Boolean(contact.es_preescriptor));
   const companies = (companiesRes.data ?? []) as CompanyRow[];
   const prospectHistory = recentProspectTasks as ProspectTaskRecord[];
   const openProspects = openProspectsRes.rows as ProspectRecord[];
@@ -347,11 +351,12 @@ export async function ActivitiesWorkspace(props: {
     const contactId = Number(String(formData.get("contact_id") ?? "").trim());
     const taskId = String(formData.get("task_id") ?? "").trim();
     const notes = String(formData.get("notes") ?? "").trim() || null;
+    const occurredAt = toIsoFromDateTimeLocalInput(formData.get("occurred_at"));
     const reactivationMode = String(formData.get("reactivation_mode") ?? "").trim();
     const latestClosedProspectId = String(formData.get("latest_closed_prospect_id") ?? "").trim();
 
     const [contactRes, taskRes, openLeadRes, openOpportunityRes] = await Promise.all([
-      actionSource.from("contactos").select("contact_id, company_id, persona_contacto, owner_user_id, owner_email").eq("contact_id", contactId).maybeSingle(),
+      actionSource.from("contactos").select("contact_id, company_id, persona_contacto, owner_user_id, owner_email, es_preescriptor").eq("contact_id", contactId).maybeSingle(),
       actionDim.from("task").select("id, name, state_id").eq("id", taskId).maybeSingle(),
       actionSource.from("leads").select("id").eq("contact_id", contactId).eq("resolution", "open").limit(1).maybeSingle(),
       actionSource.from("opportunities").select("id").eq("contact_id", contactId).eq("resolution", "open").limit(1).maybeSingle()
@@ -362,6 +367,7 @@ export async function ActivitiesWorkspace(props: {
     if (openLeadRes.error) throw openLeadRes.error;
     if (openOpportunityRes.error) throw openOpportunityRes.error;
     if (!contactRes.data) throw new Error("Contacto no encontrado");
+    if (!contactRes.data.es_preescriptor) throw new Error("Solo los contactos preescriptores pueden entrar en Negocios");
     if (!taskRes.data) throw new Error("Tarea no encontrada");
     if (openLeadRes.data?.id) throw new Error("Este contacto ya tiene un lead abierto");
     if (openOpportunityRes.data?.id) throw new Error("Este contacto ya tiene una oportunidad abierta");
@@ -393,6 +399,7 @@ export async function ActivitiesWorkspace(props: {
         contact_id: contact.contact_id,
         task_id: task.id,
         task_name: task.name,
+        occurred_at: occurredAt,
         notes,
         actor_user_id: actor.id,
         actor_email: actor.email
@@ -404,6 +411,7 @@ export async function ActivitiesWorkspace(props: {
       const converted = await convertProspectToLead({
         prospect_id: prospect.id,
         current_state_id: String(task.state_id),
+        opened_at: occurredAt,
         actor_user_id: actor.id,
         actor_email: actor.email,
         notes
@@ -412,6 +420,7 @@ export async function ActivitiesWorkspace(props: {
         entity_type: "lead",
         lead_id: converted.lead.id,
         task_id: task.id,
+        occurred_at: occurredAt,
         notes,
         actor_user_id: actor.id,
         actor_email: actor.email
@@ -548,18 +557,15 @@ export async function ActivitiesWorkspace(props: {
           </Link>
         ) : null}
 
-        <section className="task-hero card">
-          <div>
-            <p className="workspace-kicker">Tareas del pipeline</p>
-            <h3>Prospecto, Lead y Oportunidad en una vista operativa</h3>
-            <p className="muted">Desde aqui puedes lanzar tareas sobre prospectos, leads y oportunidades, y revisar rapido que esta pendiente y que ya se ha hecho.</p>
+        <div className="task-toolbar">
+          <div className="smart-tabs-row" role="tablist" aria-label="Secciones de tareas">
+            <Link href={buildSectionHref("pending")} className={activeSection === "pending" ? "smart-tab smart-tab-active" : "smart-tab"}>Tareas pendientes</Link>
+            <Link href={buildSectionHref("by_contact")} className={activeSection === "by_contact" ? "smart-tab smart-tab-active" : "smart-tab"}>Tareas por contacto</Link>
           </div>
-        </section>
-
-        <div className="smart-tabs-row" role="tablist" aria-label="Secciones de tareas">
-          <Link href={buildSectionHref("pending")} className={activeSection === "pending" ? "smart-tab smart-tab-active" : "smart-tab"}>Tareas pendientes</Link>
-          <Link href={buildSectionHref("new", initialContactId ? { contact_id: initialContactId } : {})} className={activeSection === "new" ? "smart-tab smart-tab-active" : "smart-tab"}>Nueva tarea</Link>
-          <Link href={buildSectionHref("by_contact")} className={activeSection === "by_contact" ? "smart-tab smart-tab-active" : "smart-tab"}>Tareas por contacto</Link>
+          <Link href={buildSectionHref("new", initialContactId ? { contact_id: initialContactId } : {})} className="quick-pill">
+            <span className="quick-pill-icon" aria-hidden="true"><CrmIcon name="plus" className="crm-icon" /></span>
+            <span>Nueva tarea</span>
+          </Link>
         </div>
 
         {activeSection === "pending" ? (

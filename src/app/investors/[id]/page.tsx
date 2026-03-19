@@ -8,6 +8,7 @@ import { EntityFilesPanel } from "@/components/entity-files-panel";
 import { CompanyProfileEditDialog } from "@/components/company-profile-edit-dialog";
 import { CompanyNotesDialog } from "@/components/company-notes-dialog";
 import { requireUser } from "@/lib/auth/session";
+import { toIsoFromDateTimeLocalInput } from "@/lib/datetime";
 import { getBusinessContextForInvestor } from "@/lib/db/business";
 import { addEntityNote, getInvestorById, updateInvestorProfile } from "@/lib/db/crm";
 import { deleteEntityFile, listEntityFilesWithUrls, normalizeEntityFileError, uploadEntityFile } from "@/lib/db/entity-files";
@@ -39,6 +40,7 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
     "use server";
     const actor = await requireUser();
     const body = String(formData.get("body") ?? "").trim();
+    const createdAt = toIsoFromDateTimeLocalInput(formData.get("occurred_at"));
     if (!body) return;
 
     await addEntityNote({
@@ -46,7 +48,8 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
       entity_id: params.id,
       body,
       created_by_user_id: actor.id,
-      created_by_email: actor.email
+      created_by_email: actor.email,
+      created_at: createdAt
     });
 
     revalidatePath(`/investors/${params.id}`);

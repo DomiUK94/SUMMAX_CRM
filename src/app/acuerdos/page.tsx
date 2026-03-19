@@ -8,6 +8,7 @@ import { BusinessOpportunityTaskDialog } from "@/components/business-opportunity
 import { BusinessPipelineTable } from "@/components/business-pipeline-table";
 import { BusinessProspectTaskDialog } from "@/components/business-prospect-task-dialog";
 import { requireUser } from "@/lib/auth/session";
+import { toIsoFromDateTimeLocalInput } from "@/lib/datetime";
 import { completePipelineTask } from "@/lib/db/pipeline";
 import { createLead } from "@/lib/db/leads";
 import { convertLeadToOpportunity, logStateEvent } from "@/lib/db/pipeline";
@@ -90,6 +91,7 @@ type ContactOptionRow = {
   persona_contacto: string | null;
   owner_user_id: string | null;
   owner_email: string | null;
+  es_preescriptor: boolean | null;
 };
 
 const PROSPECT_TASK_NAMES = new Set(["Contactar", "Contactado", "2ndo contacto"]);
@@ -207,7 +209,11 @@ async function listStates() {
 async function countTable(table: "contactos" | "leads" | "opportunities") {
   const db = createSourceCrmServerClient();
   const idColumn = table === "contactos" ? "contact_id" : "id";
-  const result = await db.from(table).select(idColumn, { count: "exact", head: true });
+  let query = db.from(table).select(idColumn, { count: "exact", head: true });
+  if (table === "contactos") {
+    query = query.eq("es_preescriptor", true);
+  }
+  const result = await query;
   if (result.error) throw result.error;
   return result.count ?? 0;
 }
@@ -253,7 +259,28 @@ export default async function AcuerdosPage({
   const activity3dOnly = normalizeOverdue(searchParams?.activity3d);
   const overdueOnly = normalizeOverdue(searchParams?.overdue);
 
-  const [openProspectsResult, openLeadCountResult, openOpportunityCountResult, closedDealsCountResult, products, states, owners, contactsCount, tasksRes, eventsRes, contactsRes, companiesRes, recentProspectTasks, closedProspectsRes, openLeadRowsRes, openOpportunityRowsRes, wonOpportunityRowsRes] = await Promise.all([
+  const [
+    openProspectsResult,
+    openLeadCountResult,
+    openOpportunityCountResult,
+    closedDealsCountResult,
+    products,
+    states,
+    owners,
+    totalContactsCount,
+    tasksRes,
+    eventsRes,
+    contactsRes,
+    companiesRes,
+    recentProspectTasks,
+    closedProspectsRes,
+    openLeadRowsRes,
+    openOpportunityRowsRes,
+    wonOpportunityRowsRes,
+    allProspectContactIdsRes,
+    allLeadContactIdsRes,
+    allOpportunityContactIdsRes
+  ] = await Promise.all([
     listProspectsPage({ page: 1, pageSize: 220, resolution: "open" }),
     listLeadsPage({ page: 1, pageSize: 1, resolution: "open" }),
     listOpportunitiesPage({ page: 1, pageSize: 1, resolution: "open" }),
@@ -271,7 +298,8 @@ export default async function AcuerdosPage({
       .limit(180),
     createSourceCrmServerClient()
       .from("contactos")
-      .select("contact_id, company_id, persona_contacto, owner_user_id, owner_email")
+      .select("contact_id, company_id, persona_contacto, owner_user_id, owner_email, es_preescriptor")
+      .eq("es_preescriptor", true)
       .order("updated_at", { ascending: false })
       .limit(260),
     createSourceCrmServerClient().from("inversion").select("company_id, compania").order("updated_at", { ascending: false }).limit(260),
@@ -279,13 +307,19 @@ export default async function AcuerdosPage({
     listProspectsPage({ page: 1, pageSize: 220, resolution: "not_interested" }),
     listLeadsPage({ page: 1, pageSize: 160, resolution: "open" }),
     listOpportunitiesPage({ page: 1, pageSize: 160, resolution: "open" }),
-    listOpportunitiesPage({ page: 1, pageSize: 160, resolution: "won" })
+    listOpportunitiesPage({ page: 1, pageSize: 160, resolution: "won" }),
+    createSourceCrmServerClient().from("prospects").select("contact_id"),
+    createSourceCrmServerClient().from("leads").select("contact_id"),
+    createSourceCrmServerClient().from("opportunities").select("contact_id")
   ]);
 
   if (tasksRes.error) throw tasksRes.error;
   if (eventsRes.error) throw eventsRes.error;
   if (contactsRes.error) throw contactsRes.error;
   if (companiesRes.error) throw companiesRes.error;
+  if (allProspectContactIdsRes.error) throw allProspectContactIdsRes.error;
+  if (allLeadContactIdsRes.error) throw allLeadContactIdsRes.error;
+  if (allOpportunityContactIdsRes.error) throw allOpportunityContactIdsRes.error;
 
   const [leadResult, opportunityResult] = await Promise.all([
     listLeadsPage({
@@ -324,7 +358,7 @@ export default async function AcuerdosPage({
   const wonOpportunities = wonOpportunityRowsRes.rows.filter((row) => (row.closed_amount ?? 0) > 0);
   const allTasks = (tasksRes.data ?? []) as TaskRow[];
   const events = (eventsRes.data ?? []) as EventRow[];
-  const contactOptionsRows = (contactsRes.data ?? []) as ContactOptionRow[];
+  const contactOptionsRows = ((contactsRes.data ?? []) as ContactOptionRow[]).filter((contact) => Boolean(contact.es_preescriptor));
   const recentTaskHistory = recentProspectTasks;
 
   const companyIds = Array.from(
@@ -374,6 +408,12 @@ export default async function AcuerdosPage({
   const leadCount = openLeadCountResult.totalCount;
   const opportunityCount = openOpportunityCountResult.totalCount;
   const closedDealsCount = wonOpportunities.length;
+  const contactsAlreadyInPipeline = new Set<number>([
+    ...((allProspectContactIdsRes.data ?? []).map((row) => Number(row.contact_id))),
+    ...((allLeadContactIdsRes.data ?? []).map((row) => Number(row.contact_id))),
+    ...((allOpportunityContactIdsRes.data ?? []).map((row) => Number(row.contact_id)))
+  ]);
+  const contactsCount = Math.max(0, totalContactsCount - contactsAlreadyInPipeline.size);
   const filteredOpenProspectCount = filteredOpenProspects.length;
   const filteredLeadCount = leads.length;
   const filteredOpportunityCount = opportunities.length;
@@ -578,11 +618,12 @@ export default async function AcuerdosPage({
     const contactId = Number(String(formData.get("contact_id") ?? "").trim());
     const taskId = String(formData.get("task_id") ?? "").trim();
     const notes = String(formData.get("notes") ?? "").trim() || null;
+    const occurredAt = toIsoFromDateTimeLocalInput(formData.get("occurred_at"));
     const reactivationMode = String(formData.get("reactivation_mode") ?? "").trim();
     const latestClosedProspectId = String(formData.get("latest_closed_prospect_id") ?? "").trim();
 
     const [contactRes, taskRes, openLeadRes, openOpportunityRes] = await Promise.all([
-      actionSource.from("contactos").select("contact_id, company_id, persona_contacto, owner_user_id, owner_email").eq("contact_id", contactId).maybeSingle(),
+      actionSource.from("contactos").select("contact_id, company_id, persona_contacto, owner_user_id, owner_email, es_preescriptor").eq("contact_id", contactId).maybeSingle(),
       actionDim.from("task").select("id, name, state_id").eq("id", taskId).maybeSingle(),
       actionSource.from("leads").select("id").eq("contact_id", contactId).eq("resolution", "open").limit(1).maybeSingle(),
       actionSource.from("opportunities").select("id").eq("contact_id", contactId).eq("resolution", "open").limit(1).maybeSingle()
@@ -593,6 +634,7 @@ export default async function AcuerdosPage({
     if (openLeadRes.error) throw openLeadRes.error;
     if (openOpportunityRes.error) throw openOpportunityRes.error;
     if (!contactRes.data) throw new Error("Contacto no encontrado");
+    if (!contactRes.data.es_preescriptor) throw new Error("Solo los contactos preescriptores pueden entrar en Negocios");
     if (!taskRes.data) throw new Error("Tarea no encontrada");
     if (openLeadRes.data?.id) throw new Error("Este contacto ya tiene un lead abierto");
     if (openOpportunityRes.data?.id) throw new Error("Este contacto ya tiene una oportunidad abierta");
@@ -624,6 +666,7 @@ export default async function AcuerdosPage({
         contact_id: contact.contact_id,
         task_id: task.id,
         task_name: task.name,
+        occurred_at: occurredAt,
         notes,
         actor_user_id: actor.id,
         actor_email: actor.email
@@ -635,6 +678,7 @@ export default async function AcuerdosPage({
       const converted = await convertProspectToLead({
         prospect_id: prospect.id,
         current_state_id: String(task.state_id),
+        opened_at: occurredAt,
         actor_user_id: actor.id,
         actor_email: actor.email,
         notes
@@ -643,6 +687,7 @@ export default async function AcuerdosPage({
         entity_type: "lead",
         lead_id: converted.lead.id,
         task_id: task.id,
+        occurred_at: occurredAt,
         notes,
         actor_user_id: actor.id,
         actor_email: actor.email
@@ -664,9 +709,10 @@ export default async function AcuerdosPage({
     const contactId = Number(String(formData.get("contact_id") ?? "").trim());
     const taskId = String(formData.get("task_id") ?? "").trim();
     const notes = String(formData.get("notes") ?? "").trim() || null;
+    const occurredAt = toIsoFromDateTimeLocalInput(formData.get("occurred_at"));
 
     const [contactRes, taskRes, openProspectRes, openLeadRes, openOpportunityRes] = await Promise.all([
-      actionSource.from("contactos").select("contact_id, company_id, persona_contacto, owner_user_id, owner_email").eq("contact_id", contactId).maybeSingle(),
+      actionSource.from("contactos").select("contact_id, company_id, persona_contacto, owner_user_id, owner_email, es_preescriptor").eq("contact_id", contactId).maybeSingle(),
       actionDim.from("task").select("id, name, state_id").eq("id", taskId).maybeSingle(),
       actionSource.from("prospects").select("id").eq("contact_id", contactId).eq("resolution", "open").limit(1).maybeSingle(),
       actionSource.from("leads").select("id, current_state_id").eq("contact_id", contactId).eq("resolution", "open").limit(1).maybeSingle(),
@@ -679,6 +725,7 @@ export default async function AcuerdosPage({
     if (openLeadRes.error) throw openLeadRes.error;
     if (openOpportunityRes.error) throw openOpportunityRes.error;
     if (!contactRes.data) throw new Error("Contacto no encontrado");
+    if (!contactRes.data.es_preescriptor) throw new Error("Solo los contactos preescriptores pueden entrar en Negocios");
     if (!taskRes.data) throw new Error("Tarea no encontrada");
     if (openOpportunityRes.data?.id) throw new Error("Este contacto ya tiene una oportunidad abierta");
 
@@ -692,6 +739,7 @@ export default async function AcuerdosPage({
       const converted = await convertProspectToLead({
         prospect_id: openProspectRes.data.id,
         current_state_id: String(task.state_id),
+        opened_at: occurredAt,
         actor_user_id: actor.id,
         actor_email: actor.email,
         notes
@@ -706,7 +754,7 @@ export default async function AcuerdosPage({
         owner_email: contact.owner_email ?? actor.email,
         created_by_user_id: actor.id,
         created_by_email: actor.email,
-        opened_at: new Date().toISOString(),
+        opened_at: occurredAt ?? new Date().toISOString(),
         notes: notes ?? undefined
       });
 
@@ -716,6 +764,7 @@ export default async function AcuerdosPage({
         company_id: lead.company_id,
         contact_id: lead.contact_id,
         state_id: lead.current_state_id,
+        occurred_at: occurredAt,
         actor_user_id: actor.id,
         actor_email: actor.email,
         notes: "Lead creado desde Negocios"
@@ -728,6 +777,7 @@ export default async function AcuerdosPage({
       entity_type: "lead",
       lead_id: leadId,
       task_id: task.id,
+      occurred_at: occurredAt,
       notes,
       actor_user_id: actor.id,
       actor_email: actor.email
@@ -748,6 +798,7 @@ export default async function AcuerdosPage({
     const leadId = String(formData.get("lead_id") ?? "").trim();
     const taskId = String(formData.get("task_id") ?? "").trim();
     const notes = String(formData.get("notes") ?? "").trim() || null;
+    const occurredAt = toIsoFromDateTimeLocalInput(formData.get("occurred_at"));
 
     let targetOpportunityId = opportunityId;
 
@@ -758,6 +809,7 @@ export default async function AcuerdosPage({
         lead_id: leadId,
         product_id: productId,
         opportunity_state_id: currentStateId,
+        occurred_at: occurredAt,
         actor_user_id: actor.id,
         actor_email: actor.email,
         notes
@@ -773,6 +825,7 @@ export default async function AcuerdosPage({
       entity_type: "opportunity",
       opportunity_id: targetOpportunityId,
       task_id: taskId,
+      occurred_at: occurredAt,
       notes,
       actor_user_id: actor.id,
       actor_email: actor.email
@@ -897,7 +950,7 @@ export default async function AcuerdosPage({
 
             <section className="business-pipeline-hero-flow">
               <Link href="/contacts" className="business-pipeline-hero-card card">
-                <span>Contactos</span>
+                <span>Contactos sin contactar</span>
                 <strong>{contactsCount}</strong>
               </Link>
               <span className="business-pipeline-hero-arrow" aria-hidden="true">

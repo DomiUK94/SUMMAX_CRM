@@ -6,6 +6,7 @@ import { ChangePipelineStateForm } from "@/components/change-pipeline-state-form
 import { EditOpportunityForm } from "@/components/edit-opportunity-form";
 import { LogPipelineTaskForm } from "@/components/log-pipeline-task-form";
 import { requireUser } from "@/lib/auth/session";
+import { toIsoFromDateTimeLocalInput } from "@/lib/datetime";
 import { getLeadById } from "@/lib/db/leads";
 import { getOpportunityById, updateOpportunity } from "@/lib/db/opportunities";
 import { formatCurrencyRange, getProductFamilyLabel, listProducts } from "@/lib/db/products";
@@ -172,11 +173,13 @@ export default async function OpportunityDetailPage({
   async function logOpportunityTaskAction(formData: FormData) {
     "use server";
     const actor = await requireUser();
+    const occurredAt = toIsoFromDateTimeLocalInput(formData.get("occurred_at"));
 
     await completePipelineTask({
       entity_type: "opportunity",
       opportunity_id: opportunityRecord.id,
       task_id: String(formData.get("task_id") ?? "").trim(),
+      occurred_at: occurredAt,
       notes: String(formData.get("notes") ?? "").trim() || null,
       actor_user_id: actor.id,
       actor_email: actor.email

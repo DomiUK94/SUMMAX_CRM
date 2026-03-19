@@ -1060,6 +1060,12 @@ button {
   color: #24415d;
 }
 
+.task-history-columns-trigger {
+  width: fit-content;
+  margin-left: auto;
+  justify-content: space-between;
+}
+
 .radix-menu-content {
   width: min(360px, calc(100vw - 32px));
   max-height: min(70vh, 520px);
@@ -2162,6 +2168,33 @@ button {
   border-color: rgba(226, 150, 140, 0.74);
 }
 
+.exports-advanced-form {
+  gap: 18px;
+}
+
+.exports-table-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.exports-table-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(128, 157, 180, 0.24);
+  background: rgba(248, 251, 255, 0.9);
+  color: #17324a;
+  font-weight: 700;
+}
+
+.exports-table-option input {
+  margin: 0;
+}
+
 .table-card-head {
   display: flex;
   align-items: flex-end;
@@ -2548,6 +2581,12 @@ button {
   color: #234764;
   text-decoration: none;
   box-shadow: 0 10px 18px rgba(22, 52, 77, 0.06);
+}
+
+button.contact-quick-sheet-contact-button {
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
 }
 
 .contact-quick-sheet-contact-button .crm-icon {
@@ -2983,6 +3022,28 @@ button[type="submit"] {
   flex-wrap: wrap;
   gap: 10px;
   align-items: center;
+}
+
+.task-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.task-toolbar .smart-tabs-row {
+  flex: 1 1 auto;
+}
+
+@media (max-width: 720px) {
+  .task-toolbar {
+    align-items: stretch;
+  }
+
+  .task-toolbar .quick-pill {
+    width: 100%;
+  }
 }
 
 .business-guide-trigger {
@@ -4054,13 +4115,16 @@ button[type="submit"] {
 }
 
 .business-sort-trigger {
+  appearance: none;
   display: inline-flex;
   align-items: center;
   gap: 8px;
   width: 100%;
   padding: 0;
   border: 0;
+  border-radius: 0;
   background: transparent;
+  box-shadow: none;
   color: inherit;
   font: inherit;
   font-weight: 800;
@@ -4322,6 +4386,25 @@ button[type="submit"] {
 .contacts-toolbar .entity-toolbar input,
 .contacts-toolbar .entity-toolbar-trigger {
   min-height: 40px;
+}
+
+.contacts-toolbar .contacts-columns-trigger {
+  min-height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  color: #2b4f71;
+  font-weight: 700;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.contacts-toolbar .contacts-columns-trigger:hover {
+  color: #17324a;
+  background: transparent;
+  transform: none;
 }
 
 .contacts-toolbar .smart-tabs-row {
@@ -5267,6 +5350,14 @@ button[type="submit"] {
   color: #274866;
 }
 
+button.contact-record-action-pill {
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+}
+
 .contact-record-action-icon {
   width: 46px;
   height: 46px;
@@ -5284,6 +5375,34 @@ button[type="submit"] {
 .contact-record-action-pill-disabled {
   opacity: 0.48;
   pointer-events: none;
+}
+
+.contact-email-dialog-content {
+  width: min(440px, calc(100vw - 24px));
+}
+
+.contact-email-dialog-body {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(149, 171, 191, 0.22);
+  background: rgba(244, 249, 255, 0.92);
+}
+
+.contact-email-dialog-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6a8095;
+}
+
+.contact-email-dialog-value {
+  font-size: 18px;
+  line-height: 1.4;
+  color: #173a56;
+  word-break: break-word;
 }
 
 .contact-record-info {

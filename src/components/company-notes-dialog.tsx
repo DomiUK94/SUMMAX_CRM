@@ -1,6 +1,7 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
+import { TaskOccurredAtField } from "@/components/task-occurred-at-field";
 import { CrmIcon } from "@/components/ui/crm-icon";
 
 type NoteItem = {
@@ -41,6 +42,7 @@ export function CompanyNotesDialog({ notes, action }: Props) {
 
           <form action={action} className="stack">
             <textarea name="body" rows={5} placeholder="Escribe una nota interna..." required />
+            <TaskOccurredAtField />
             <div className="radix-dialog-actions">
               <Dialog.Close asChild>
                 <button type="button">Cancelar</button>

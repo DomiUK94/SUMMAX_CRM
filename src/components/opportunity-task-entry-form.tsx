@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { TaskOccurredAtField } from "@/components/task-occurred-at-field";
 
 type SourceOption = {
   id: string;
@@ -140,6 +141,8 @@ export function OpportunityTaskEntryForm({ title, subtitle, sources, tasks, stat
         <span>Notas</span>
         <textarea name="notes" rows={4} placeholder="Contexto o resultado de la tarea..." />
       </label>
+
+      <TaskOccurredAtField />
 
       {selectedSource ? <input type="hidden" name="source_mode" value={selectedSource.mode} /> : null}
       {selectedSource?.leadId ? <input type="hidden" name="lead_id" value={selectedSource.leadId} /> : null}

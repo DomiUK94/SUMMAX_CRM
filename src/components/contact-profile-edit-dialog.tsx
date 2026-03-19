@@ -6,6 +6,7 @@ import { CrmIcon } from "@/components/ui/crm-icon";
 type Props = {
   iconOnly?: boolean;
   action: (formData: FormData) => void | Promise<void>;
+  owners: Array<{ id: string; email: string }>;
   defaults: {
     full_name: string;
     email: string;
@@ -14,10 +15,15 @@ type Props = {
     other_contact: string;
     linkedin: string;
     comments: string;
+    is_financier: string;
+    is_prescriber: string;
+    owner_user_id: string;
+    next_step: string;
+    due_date: string;
   };
 };
 
-export function ContactProfileEditDialog({ action, defaults, iconOnly = false }: Props) {
+export function ContactProfileEditDialog({ action, defaults, owners, iconOnly = false }: Props) {
   return (
     <Dialog.Root>
       <Dialog.Trigger asChild>
@@ -32,7 +38,7 @@ export function ContactProfileEditDialog({ action, defaults, iconOnly = false }:
           <div className="radix-dialog-head">
             <div>
               <Dialog.Title>Modificar datos</Dialog.Title>
-              <Dialog.Description>Actualiza los datos principales del contacto sin salir de la ficha.</Dialog.Description>
+              <Dialog.Description>Actualiza todos los datos editables del contacto sin salir de la ficha.</Dialog.Description>
             </div>
                         <Dialog.Close asChild>
               <button type="button" className="radix-dialog-close" aria-label="Cerrar">
@@ -65,6 +71,39 @@ export function ContactProfileEditDialog({ action, defaults, iconOnly = false }:
             <label className="form-field">
               <span>LinkedIn</span>
               <input name="linkedin" defaultValue={defaults.linkedin} />
+            </label>
+            <label className="form-field">
+              <span>Propietario</span>
+              <select name="owner_user_id" defaultValue={defaults.owner_user_id}>
+                <option value="">Sin propietario</option>
+                {owners.map((owner) => (
+                  <option key={owner.id} value={owner.id}>
+                    {owner.email}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="form-field">
+              <span>Es financiador</span>
+              <select name="is_financier" defaultValue={defaults.is_financier}>
+                <option value="No">No</option>
+                <option value="Si">Si</option>
+              </select>
+            </label>
+            <label className="form-field">
+              <span>Es preescriptor</span>
+              <select name="is_prescriber" defaultValue={defaults.is_prescriber}>
+                <option value="No">No</option>
+                <option value="Si">Si</option>
+              </select>
+            </label>
+            <label className="form-field company-detail-field-span-2">
+              <span>Próxima acción</span>
+              <input name="next_step" defaultValue={defaults.next_step} />
+            </label>
+            <label className="form-field">
+              <span>Fecha objetivo</span>
+              <input name="due_date" type="date" defaultValue={defaults.due_date} />
             </label>
             <label className="form-field company-detail-field-span-3">
               <span>Comentarios</span>

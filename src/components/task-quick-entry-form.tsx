@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { TaskOccurredAtField } from "@/components/task-occurred-at-field";
 
 type EntityOption = {
   id: string;
@@ -93,6 +94,8 @@ export function TaskQuickEntryForm({
         <span>Notas</span>
         <textarea name="notes" rows={4} placeholder="Contexto o resultado de la tarea..." />
       </label>
+
+      <TaskOccurredAtField />
 
       <div className="deal-convert-actions">
         <button type="submit" disabled={!selectedEntity}>

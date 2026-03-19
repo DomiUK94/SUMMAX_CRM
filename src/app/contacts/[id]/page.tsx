@@ -2,14 +2,17 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { ContactEmailDialog } from "@/components/contact-email-dialog";
 import { ContactDetailCenter } from "@/components/contact-detail-center";
 import { EntityFilesPanel } from "@/components/entity-files-panel";
 import { ContactProfileEditDialog } from "@/components/contact-profile-edit-dialog";
 import { CrmIcon } from "@/components/ui/crm-icon";
 import { requireUser } from "@/lib/auth/session";
+import { toIsoFromDateTimeLocalInput } from "@/lib/datetime";
 import { getBusinessContextForContact } from "@/lib/db/business";
 import { addComment, getContactById, updateContactProfile } from "@/lib/db/crm";
 import { deleteEntityFile, listEntityFilesWithUrls, normalizeEntityFileError, uploadEntityFile } from "@/lib/db/entity-files";
+import { listAssignableUsers } from "@/lib/db/users";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
 type PageProps = {
@@ -35,16 +38,18 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
   const user = await requireUser();
   const data = await getContactById(params.id);
   const db = createSourceCrmServerClient();
-  const [tagLinksRes, auditRes, business] = await Promise.all([
+  const [tagLinksRes, auditRes, business, owners] = await Promise.all([
     db.from("entity_tags").select("tag_id, tags(id, name, color)").eq("entity_type", "contact").eq("entity_id", params.id),
     db.from("audit_log").select("id, field, old_value, new_value, action, changed_by_email, changed_at").eq("entity_type", "contact").eq("entity_id", params.id).order("changed_at", { ascending: false }).limit(12),
-    getBusinessContextForContact(params.id)
+    getBusinessContextForContact(params.id),
+    listAssignableUsers()
   ]);
 
   async function addCommentAction(formData: FormData) {
     "use server";
     const actor = await requireUser();
     const body = String(formData.get("body") ?? "").trim();
+    const createdAt = toIsoFromDateTimeLocalInput(formData.get("occurred_at"));
     if (!body) return;
 
     await addComment({
@@ -52,7 +57,8 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
       entity_id: params.id,
       body,
       created_by_user_id: actor.id,
-      created_by_email: actor.email
+      created_by_email: actor.email,
+      created_at: createdAt
     });
 
     revalidatePath(`/contacts/${params.id}`);
@@ -63,6 +69,8 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
     "use server";
     const actor = await requireUser();
     try {
+      const ownerUserId = String(formData.get("owner_user_id") ?? "").trim();
+      const owner = owners.find((entry) => entry.id === ownerUserId) ?? null;
       await updateContactProfile({
         contact_id: params.id,
         full_name: String(formData.get("full_name") ?? "").trim(),
@@ -72,6 +80,12 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
         other_contact: String(formData.get("other_contact") ?? "").trim() || undefined,
         linkedin: String(formData.get("linkedin") ?? "").trim() || undefined,
         comments: String(formData.get("comments") ?? "").trim() || undefined,
+        is_financier: String(formData.get("is_financier") ?? "No") === "Si",
+        is_prescriber: String(formData.get("is_prescriber") ?? "No") === "Si",
+        owner_user_id: owner?.id ?? undefined,
+        owner_email: owner?.email ?? undefined,
+        next_step: String(formData.get("next_step") ?? "").trim() || undefined,
+        due_date: String(formData.get("due_date") ?? "").trim() || undefined,
         actor_user_id: actor.id,
         actor_email: actor.email
       });
@@ -157,10 +171,9 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
 
   const quickActions = [
     { label: "Nota", icon: "report" as const, href: `/contacts/${encodeURIComponent(params.id)}?tab=activities#contact-notes` },
-    { label: "Correo", icon: "mail" as const, href: contact.email ? `mailto:${contact.email}` : undefined },
     { label: "LinkedIn", icon: "linkedin" as const, href: contact.linkedin ? contact.linkedin : undefined },
     { label: "Tarea", icon: "task" as const, href: `/actividades?section=new&contact_id=${encodeURIComponent(params.id)}` },
-    { label: "Mas", icon: "more" as const, href: contact.investor_id ? `/investors/${encodeURIComponent(contact.investor_id)}` : undefined }
+    { label: "Compañia", icon: "companies" as const, href: contact.investor_id ? `/investors/${encodeURIComponent(contact.investor_id)}` : undefined }
   ];
 
   const relatedCompanies = contact.investor_name
@@ -179,7 +192,12 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
     role: contact.role ?? "",
     other_contact: contact.other_contact ?? "",
     linkedin: contact.linkedin ?? "",
-    comments: contact.comments ?? ""
+    comments: contact.comments ?? "",
+    is_financier: "is_financier" in contact ? contact.is_financier : "No",
+    is_prescriber: "is_prescriber" in contact ? contact.is_prescriber : "No",
+    owner_user_id: contact.owner_user_id ?? "",
+    next_step: "next_step" in contact && typeof contact.next_step === "string" ? contact.next_step : "",
+    due_date: "due_date" in contact && typeof contact.due_date === "string" ? contact.due_date.slice(0, 10) : ""
   };
 
   return (
@@ -206,6 +224,19 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
             </div>
 
             <div className="contact-record-actions-grid">
+              {contact.email ? (
+                <ContactEmailDialog email={contact.email} title="Correo de contacto" description="Mostramos el email sin abrir el gestor de correo del equipo.">
+                  <button type="button" className="contact-record-action-pill">
+                    <span className="contact-record-action-icon"><CrmIcon name="mail" className="crm-icon" /></span>
+                    <span>Correo</span>
+                  </button>
+                </ContactEmailDialog>
+              ) : (
+                <div className="contact-record-action-pill contact-record-action-pill-disabled">
+                  <span className="contact-record-action-icon"><CrmIcon name="mail" className="crm-icon" /></span>
+                  <span>Correo</span>
+                </div>
+              )}
               {quickActions.map((action) =>
                 action.href ? (
                   <Link key={action.label} href={action.href} className="contact-record-action-pill">
@@ -229,7 +260,7 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
                 <h3>Informacion clave</h3>
               </div>
               <div className="row" style={{ gap: 10, alignItems: "center" }}>
-                <ContactProfileEditDialog action={updateContactAction} defaults={contactDefaults} iconOnly />
+                <ContactProfileEditDialog action={updateContactAction} defaults={contactDefaults} owners={owners} iconOnly />
               </div>
             </div>
 
@@ -247,6 +278,7 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
 
         <ContactDetailCenter
           defaults={contactDefaults}
+          owners={owners.map((owner) => ({ id: owner.id, email: owner.email }))}
           info={{
             name: contact.full_name,
             email: contact.email ?? "--",
@@ -254,6 +286,8 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
             role: contact.role ?? "--",
             otherContact: contact.other_contact ?? "--",
             linkedin: contact.linkedin ?? "--",
+            isFinancier: "is_financier" in contact ? contact.is_financier : "No",
+            isPrescriber: "is_prescriber" in contact ? contact.is_prescriber : "No",
             comments: contact.comments ?? "--"
           }}
           closedDeals={business.opportunities
@@ -302,10 +336,16 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
                 <span>Empresas ({relatedCompanies.length})</span>
               </div>
               <details className="contact-record-mini-menu">
-                <summary className="contact-record-mini-action">Agregar</summary>
+                <summary className="contact-record-mini-action">{relatedCompanies.length > 0 ? "Modificar" : "Agregar"}</summary>
                 <div className="contact-record-mini-menu-list">
-                  <Link href="/investors/new" className="contact-record-mini-menu-item">Agregar nueva empresa</Link>
-                  <Link href="/investors" className="contact-record-mini-menu-item">Agregar existente</Link>
+                  {relatedCompanies.length > 0 ? (
+                    <Link href={`/contacts/${encodeURIComponent(params.id)}/company`} className="contact-record-mini-menu-item">Modificar compañía</Link>
+                  ) : (
+                    <>
+                      <Link href="/investors/new" className="contact-record-mini-menu-item">Agregar nueva empresa</Link>
+                      <Link href="/investors" className="contact-record-mini-menu-item">Agregar existente</Link>
+                    </>
+                  )}
                 </div>
               </details>
             </summary>

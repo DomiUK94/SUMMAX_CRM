@@ -3,8 +3,9 @@ import { InvestorsTable } from "@/components/investors-table";
 import { RowsPerPageSelect } from "@/components/rows-per-page-select";
 import { requireUser } from "@/lib/auth/session";
 import { normalizePerPage } from "@/lib/ui/pagination";
+import { readInvestorColumnFilters, writeInvestorColumnFiltersToUrlSearchParams, type InvestorColumnFilterState } from "@/lib/ui/investor-table-filters";
 import Link from "next/link";
-import { listInvestorsPage } from "@/lib/db/crm";
+import { getInvestorQuickCounts, listInvestorsPage } from "@/lib/db/crm";
 import { CrmIcon } from "@/components/ui/crm-icon";
 
 function normalizePage(value: string | undefined): number {
@@ -13,22 +14,31 @@ function normalizePage(value: string | undefined): number {
   return Math.trunc(parsed);
 }
 
-function hrefFor(page: number, perPage: number): string {
-  return `/investors?page=${page}&per_page=${perPage}`;
+function hrefFor(page: number, perPage: number, q: string, columnFilters: InvestorColumnFilterState): string {
+  const params = new URLSearchParams();
+  params.set("page", String(page));
+  params.set("per_page", String(perPage));
+  if (q) params.set("q", q);
+  writeInvestorColumnFiltersToUrlSearchParams(params, columnFilters);
+  return `/investors?${params.toString()}`;
 }
 
 export default async function InvestorsPage({
   searchParams
 }: {
-  searchParams?: { page?: string; per_page?: string };
+  searchParams?: Record<string, string | string[] | undefined>;
 }) {
   const user = await requireUser();
-  const requestedPage = normalizePage(searchParams?.page);
-  const perPage = normalizePerPage(searchParams?.per_page);
+  const requestedPage = normalizePage(Array.isArray(searchParams?.page) ? searchParams?.page[0] : searchParams?.page);
+  const perPage = normalizePerPage(Array.isArray(searchParams?.per_page) ? searchParams?.per_page[0] : searchParams?.per_page);
+  const q = String(Array.isArray(searchParams?.q) ? searchParams?.q[0] : searchParams?.q ?? "").trim();
+  const columnFilters = readInvestorColumnFilters(searchParams);
 
   let { rows: investors, totalCount } = await listInvestorsPage({
     page: requestedPage,
-    pageSize: perPage
+    pageSize: perPage,
+    q,
+    columnFilters
   });
 
   const totalPages = Math.max(1, Math.ceil(totalCount / perPage));
@@ -37,7 +47,9 @@ export default async function InvestorsPage({
   if (requestedPage !== currentPage) {
     const fallback = await listInvestorsPage({
       page: currentPage,
-      pageSize: perPage
+      pageSize: perPage,
+      q,
+      columnFilters
     });
     investors = fallback.rows;
     totalCount = fallback.totalCount;
@@ -45,6 +57,7 @@ export default async function InvestorsPage({
 
   const hasPrev = currentPage > 1;
   const hasNext = currentPage < totalPages;
+  const quickCounts = await getInvestorQuickCounts({ q, columnFilters });
 
   return (
     <AppShell title="Compañia" subtitle="Vista CRM" canViewGlobal={user.can_view_global_dashboard}>
@@ -55,11 +68,11 @@ export default async function InvestorsPage({
           </button>
         </div>
         <div className="companies-toolbar card">
-          <InvestorsTable investors={investors} storageKeyPrefix={`user:${user.id}:investors`} />
+          <InvestorsTable investors={investors} quickCounts={quickCounts} storageKeyPrefix={`user:${user.id}:investors`} />
 
           <div className="companies-pagination">
             {hasPrev ? (
-              <Link href={hrefFor(currentPage - 1, perPage)} className="companies-tab">
+              <Link href={hrefFor(currentPage - 1, perPage, q, columnFilters)} className="companies-tab">
                 Anterior
               </Link>
             ) : (
@@ -67,7 +80,7 @@ export default async function InvestorsPage({
             )}
             <span className="companies-page-current">{currentPage}</span>
             {hasNext ? (
-              <Link href={hrefFor(currentPage + 1, perPage)} className="companies-tab">
+              <Link href={hrefFor(currentPage + 1, perPage, q, columnFilters)} className="companies-tab">
                 Siguiente
               </Link>
             ) : (
