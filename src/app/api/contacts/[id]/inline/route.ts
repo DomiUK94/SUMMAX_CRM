@@ -103,16 +103,24 @@ export async function PATCH(request: Request, context: { params: { id: string } 
   }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  await writeAuditEntry({
-    entityType: "contact",
-    entityId: String(contactId),
-    action: "update",
-    changedByUserId: user.id,
-    changedByEmail: user.email,
-    field,
-    oldValue,
-    newValue
-  });
+  try {
+    await writeAuditEntry({
+      entityType: "contact",
+      entityId: String(contactId),
+      action: "update",
+      changedByUserId: user.id,
+      changedByEmail: user.email,
+      field,
+      oldValue,
+      newValue
+    });
+  } catch (error) {
+    console.error("Audit log failed after inline contact update", {
+      contactId,
+      field,
+      error
+    });
+  }
 
   return NextResponse.json({ ok: true });
 }

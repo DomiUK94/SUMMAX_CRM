@@ -200,7 +200,7 @@ export function ManageInvestorsTable({
   return (
     <div className="stack" style={{ gap: 14 }}>
       <div className="entity-toolbar">
-        <div className="entity-toolbar-inline entity-toolbar-inline-full">
+        <div className="entity-toolbar-inline entity-toolbar-inline-full" style={{ justifyContent: "space-between", alignItems: "center", width: "100%" }}>
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <button type="button" className="entity-toolbar-trigger contacts-columns-trigger">
@@ -222,14 +222,24 @@ export function ManageInvestorsTable({
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
+          <div className="row" style={{ gap: 10, alignItems: "center" }}>
+            <Link href={returnTo} className="button-outline-success">
+              Volver a companias
+            </Link>
+            <button type="button" className="editor-save-button" onClick={applyChanges} disabled={saving || rows.length === 0}>
+              {saving ? "Aplicando..." : "Aplicar"}
+            </button>
+          </div>
         </div>
       </div>
+
+      {error ? <div className="notice notice-error">{error}</div> : null}
 
       <DataTable
         table={table}
         className="companies-table-wrap"
-        emptyLabel="Sin companias seleccionadas."
-        emptyHint="Vuelve a Companias y marca al menos una fila para usar la modificacion multiple."
+        emptyLabel="Sin companias en la vista actual."
+        emptyHint="Ajusta los filtros o vuelve a Companias para cambiar la vista de modificacion multiple."
         emptyAction={<Link href={returnTo} className="companies-tab">Volver</Link>}
         headerFilters={{
           id: <input value={columnFilters.id ?? ""} onChange={(event) => setColumnFilters((current) => ({ ...current, id: event.target.value }))} placeholder="Filtrar" />,
@@ -242,18 +252,6 @@ export function ManageInvestorsTable({
           updated_at: <input value={columnFilters.updated_at ?? ""} onChange={(event) => setColumnFilters((current) => ({ ...current, updated_at: event.target.value }))} placeholder="Filtrar" />
         }}
       />
-
-      <div className="form-actions-bar-manage-contacts">
-        <Link href={returnTo} className="button-outline-success">
-          Volver sin guardar
-        </Link>
-        <div className="table-filter-actions-center">
-          {error ? <div className="notice notice-error">{error}</div> : null}
-        </div>
-        <button type="button" className="editor-save-button" onClick={applyChanges} disabled={saving || rows.length === 0}>
-          {saving ? "Aplicando..." : "Aplicar"}
-        </button>
-      </div>
     </div>
   );
 }

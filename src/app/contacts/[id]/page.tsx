@@ -38,9 +38,31 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
   const user = await requireUser();
   const data = await getContactById(params.id);
   const db = createSourceCrmServerClient();
+  const auditPromise = (async () => {
+    let result = await db
+      .from("audit_log")
+      .select("id, field, old_value, new_value, action, changed_by_email, changed_at")
+      .eq("entity_type", "contact")
+      .eq("entity_id", params.id)
+      .order("changed_at", { ascending: false })
+      .limit(12);
+
+    if (result.error?.code === "PGRST205") {
+      result = await db
+        .from("audit_logs")
+        .select("id, field, old_value, new_value, action, changed_by_email, changed_at")
+        .eq("entity_type", "contact")
+        .eq("entity_id", params.id)
+        .order("changed_at", { ascending: false })
+        .limit(12);
+    }
+
+    return result;
+  })();
+
   const [tagLinksRes, auditRes, business, owners] = await Promise.all([
     db.from("entity_tags").select("tag_id, tags(id, name, color)").eq("entity_type", "contact").eq("entity_id", params.id),
-    db.from("audit_log").select("id, field, old_value, new_value, action, changed_by_email, changed_at").eq("entity_type", "contact").eq("entity_id", params.id).order("changed_at", { ascending: false }).limit(12),
+    auditPromise,
     getBusinessContextForContact(params.id),
     listAssignableUsers()
   ]);

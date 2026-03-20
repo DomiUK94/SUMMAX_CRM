@@ -255,7 +255,7 @@ export function ManageContactsTable({
         cell: ({ row }) => formatDateTime(row.original.updated_at)
       }
     ],
-    [owners, rows]
+    [owners]
   );
 
   const table = useReactTable({
@@ -318,7 +318,7 @@ export function ManageContactsTable({
   return (
     <div className="stack" style={{ gap: 14 }}>
       <div className="entity-toolbar">
-        <div className="entity-toolbar-inline entity-toolbar-inline-full">
+        <div className="entity-toolbar-inline entity-toolbar-inline-full" style={{ justifyContent: "space-between", alignItems: "center", width: "100%" }}>
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <button type="button" className="entity-toolbar-trigger contacts-columns-trigger">
@@ -340,14 +340,24 @@ export function ManageContactsTable({
               </DropdownMenu.Content>
             </DropdownMenu.Portal>
           </DropdownMenu.Root>
+          <div className="row" style={{ gap: 10, alignItems: "center" }}>
+            <Link href={returnTo} className="button-outline-success">
+              Volver a contactos
+            </Link>
+            <button type="button" className="editor-save-button" onClick={applyChanges} disabled={saving || rows.length === 0}>
+              {saving ? "Aplicando..." : "Aplicar"}
+            </button>
+          </div>
         </div>
       </div>
+
+      {error ? <div className="notice notice-error">{error}</div> : null}
 
       <DataTable
         table={table}
         className="contacts-table-wrap"
-        emptyLabel="Sin contactos seleccionados."
-        emptyHint="Vuelve a Contactos y marca al menos una fila para usar la modificación múltiple."
+        emptyLabel="Sin contactos en la vista actual."
+        emptyHint="Ajusta los filtros o vuelve a Contactos para cambiar la vista de modificacion multiple."
         emptyAction={
           <Link href={returnTo} className="contacts-tab">
             Volver
@@ -369,18 +379,6 @@ export function ManageContactsTable({
           updated_at: <input value={columnFilters.updated_at ?? ""} onChange={(event) => setColumnFilters((current) => ({ ...current, updated_at: event.target.value }))} placeholder="Filtrar" />
         }}
       />
-
-      <div className="form-actions-bar-manage-contacts">
-        <Link href={returnTo} className="button-outline-success">
-          Volver sin guardar
-        </Link>
-        <div className="table-filter-actions-center">
-          {error ? <div className="notice notice-error">{error}</div> : null}
-        </div>
-        <button type="button" className="editor-save-button" onClick={applyChanges} disabled={saving || rows.length === 0}>
-          {saving ? "Aplicando..." : "Aplicar"}
-        </button>
-      </div>
     </div>
   );
 }

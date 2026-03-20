@@ -335,7 +335,7 @@ async function listEntityNotes(entityType: "contact" | "investor", entityId: str
 
 async function listAuditRows(entityType: "contact" | "investor", entityId: string) {
   const db = createSourceCrmServerClient();
-  const result = await db
+  let result = await db
     .from("audit_log")
     .select("id, field, old_value, new_value, action, changed_by_email, changed_at")
     .eq("entity_type", entityType)
@@ -343,8 +343,30 @@ async function listAuditRows(entityType: "contact" | "investor", entityId: strin
     .order("changed_at", { ascending: false })
     .limit(18);
 
-  if (result.error) throw result.error;
+  if (result.error?.code === "PGRST205") {
+    result = await db
+      .from("audit_logs")
+      .select("id, field, old_value, new_value, action, changed_by_email, changed_at")
+      .eq("entity_type", entityType)
+      .eq("entity_id", entityId)
+      .order("changed_at", { ascending: false })
+      .limit(18);
+  }
+
+  if (result.error) {
+    console.error("Vision 360 audit query failed", { entityType, entityId, error: result.error });
+    return [] as AuditRow[];
+  }
   return (result.data ?? []) as AuditRow[];
+}
+
+async function safeAsync<T>(label: string, fallback: T, task: () => Promise<T>): Promise<T> {
+  try {
+    return await task();
+  } catch (error) {
+    console.error(`Vision 360 ${label} failed`, error);
+    return fallback;
+  }
 }
 
 async function listTags(entityType: "contact" | "investor", entityId: string) {
@@ -491,11 +513,11 @@ async function listInvestorContactFollowUps(companyId: string) {
 export async function getContact360DashboardData(contactId: string): Promise<Contact360DashboardData | null> {
   const [contactData, business, files, auditRows, tags, entityNotes] = await Promise.all([
     getContactById(contactId),
-    getBusinessContextForContact(contactId),
-    listEntityFilesWithUrls("contact", contactId),
-    listAuditRows("contact", contactId),
-    listTags("contact", contactId),
-    listEntityNotes("contact", contactId)
+    safeAsync("contact business context", { leads: [], opportunities: [], timeline: [] }, () => getBusinessContextForContact(contactId)),
+    safeAsync("contact files", [] as EntityFileView[], () => listEntityFilesWithUrls("contact", contactId)),
+    safeAsync("contact audit", [] as AuditRow[], () => listAuditRows("contact", contactId)),
+    safeAsync("contact tags", [] as string[], () => listTags("contact", contactId)),
+    safeAsync("contact notes", [] as EntityNoteRow[], () => listEntityNotes("contact", contactId))
   ]);
 
   if (!contactData.contact) return null;
@@ -586,12 +608,12 @@ export async function getContact360DashboardData(contactId: string): Promise<Con
 export async function getInvestor360DashboardData(companyId: string): Promise<Investor360DashboardData | null> {
   const [investorData, business, files, auditRows, tags, entityNotes, followUps] = await Promise.all([
     getInvestorById(companyId),
-    getBusinessContextForInvestor(companyId),
-    listEntityFilesWithUrls("investor", companyId),
-    listAuditRows("investor", companyId),
-    listTags("investor", companyId),
-    listEntityNotes("investor", companyId),
-    listInvestorContactFollowUps(companyId)
+    safeAsync("investor business context", { leads: [], opportunities: [], timeline: [] }, () => getBusinessContextForInvestor(companyId)),
+    safeAsync("investor files", [] as EntityFileView[], () => listEntityFilesWithUrls("investor", companyId)),
+    safeAsync("investor audit", [] as AuditRow[], () => listAuditRows("investor", companyId)),
+    safeAsync("investor tags", [] as string[], () => listTags("investor", companyId)),
+    safeAsync("investor notes", [] as EntityNoteRow[], () => listEntityNotes("investor", companyId)),
+    safeAsync("investor follow ups", [] as ContactFollowUpRow[], () => listInvestorContactFollowUps(companyId))
   ]);
 
   if (!investorData.investor) return null;
@@ -690,7 +712,10 @@ export async function listVision360Contacts(query: string) {
   }
 
   const result = await request;
-  if (result.error) throw result.error;
+  if (result.error) {
+    console.error("Vision 360 contacts landing query failed", result.error);
+    return [] satisfies Dashboard360ContactListItem[];
+  }
 
   return (result.data ?? []).map((row) => ({
     id: String(row.contact_id),
@@ -716,7 +741,10 @@ export async function listVision360Investors(query: string) {
   }
 
   const result = await request;
-  if (result.error) throw result.error;
+  if (result.error) {
+    console.error("Vision 360 investors landing query failed", result.error);
+    return [] satisfies Dashboard360InvestorListItem[];
+  }
 
   return (result.data ?? []).map((row) => ({
     id: String(row.company_id),

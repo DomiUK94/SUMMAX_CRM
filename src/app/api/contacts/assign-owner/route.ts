@@ -50,19 +50,27 @@ export async function POST(request: Request) {
   }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  await Promise.all(
-    contactIds.map((id) =>
-      writeAuditEntry({
-        entityType: "contact",
-        entityId: String(id),
-        action: "assign",
-        changedByUserId: user.id,
-        changedByEmail: user.email,
-        field: "owner_user_id",
-        newValue: owner.id
-      })
-    )
-  );
+  try {
+    await Promise.all(
+      contactIds.map((id) =>
+        writeAuditEntry({
+          entityType: "contact",
+          entityId: String(id),
+          action: "assign",
+          changedByUserId: user.id,
+          changedByEmail: user.email,
+          field: "owner_user_id",
+          newValue: owner.id
+        })
+      )
+    );
+  } catch (error) {
+    console.error("Audit log failed after bulk owner assignment", {
+      contactIds,
+      ownerUserId: owner.id,
+      error
+    });
+  }
 
   return NextResponse.json({ ok: true, updated: contactIds.length });
 }

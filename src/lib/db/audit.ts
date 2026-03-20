@@ -16,7 +16,7 @@ export async function writeAuditEntry(params: {
   metadata?: Record<string, unknown>;
 }) {
   const db = createSourceCrmServerClient();
-  const { error } = await db.from("audit_log").insert({
+  const payload = {
     entity_type: params.entityType,
     entity_id: params.entityId,
     action: params.action,
@@ -26,7 +26,13 @@ export async function writeAuditEntry(params: {
     changed_by_user_id: params.changedByUserId,
     changed_by_email: params.changedByEmail,
     metadata: params.metadata ?? {}
-  });
+  };
+  let { error } = await db.from("audit_log").insert(payload);
+
+  if (error?.code === "PGRST205") {
+    const fallback = await db.from("audit_logs").insert(payload);
+    error = fallback.error;
+  }
 
   if (error) {
     throw error;
