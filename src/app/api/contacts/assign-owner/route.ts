@@ -9,6 +9,18 @@ type AssignOwnerPayload = {
   ownerUserId?: string;
 };
 
+function missingOwnerColumnsMessage() {
+  return "Falta aplicar la migracion de propietarios en sourcecrm.contactos (20260218_phase6_sourcecrm_contact_owner.sql)";
+}
+
+function hasMissingOwnerColumns(error: { code?: string; message?: string } | null | undefined) {
+  const message = String(error?.message ?? "");
+  return (
+    (error?.code === "PGRST204" || error?.code === "42703") &&
+    (message.includes("owner_user_id") || message.includes("owner_email"))
+  );
+}
+
 export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user || !canManageCrmAdmin(user)) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
@@ -33,6 +45,9 @@ export async function POST(request: Request) {
     })
     .in("contact_id", contactIds);
 
+  if (hasMissingOwnerColumns(error)) {
+    return NextResponse.json({ error: missingOwnerColumnsMessage() }, { status: 500 });
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   await Promise.all(

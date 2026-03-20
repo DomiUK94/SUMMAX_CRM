@@ -204,7 +204,8 @@ export default async function InvestorDetailPage({ params, searchParams }: PageP
     { label: "Correo", icon: "mail" as const, href: primaryContact?.email ? `mailto:${primaryContact.email}` : undefined },
     { label: "LinkedIn", icon: "linkedin" as const, href: investor.linkedin ? investor.linkedin : undefined, external: Boolean(investor.linkedin) },
     { label: "Web", icon: "web" as const, href: investor.website ? investor.website : undefined, external: Boolean(investor.website) },
-    { label: "Tarea", icon: "task" as const, href: "/actividades?section=new" }
+    { label: "Tarea", icon: "task" as const, href: "/actividades?section=new" },
+    { label: "Visión 360", icon: "spark" as const, href: `/dashboard/vision-360/companias/${encodeURIComponent(params.id)}` }
   ];
 
   return (

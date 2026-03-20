@@ -14,6 +14,29 @@ Este archivo resume los cambios de la aplicacion por dia.
   - Archivos/API/migraciones afectadas.
 ```
 
+## 2026-03-20
+- Resumen: nuevo modulo analitico `Vision 360` para contacto y compania.
+- Modulos:
+  - Dashboard:
+    - Nueva entrada `Vision 360` en navegacion de Analitica con landing de acceso rapido.
+    - Nuevas rutas de detalle 360 para contacto y compania, protegidas por permiso global.
+  - Contactos y Cuentas:
+    - Enlaces cruzados desde fichas actuales hacia la nueva vista ejecutiva 360.
+  - Capa de datos:
+    - Nuevo agregador 360 reutilizando CRM, negocio, auditoria, notas, etiquetas y archivos.
+    - Timeline unificado con decisiones relevantes y bloque `Que toca ahora`.
+- Tecnico:
+  - `src/lib/db/business.ts`
+  - `src/lib/db/dashboard-360.ts`
+  - `src/components/dashboard-360-detail.tsx`
+  - `src/components/app-shell.tsx`
+  - `src/app/dashboard/vision-360/page.tsx`
+  - `src/app/dashboard/vision-360/contactos/[id]/page.tsx`
+  - `src/app/dashboard/vision-360/companias/[id]/page.tsx`
+  - `src/app/contacts/[id]/page.tsx`
+  - `src/app/investors/[id]/page.tsx`
+  - `src/app/globals.css`
+
 ## 2026-02-20
 - Resumen: correccion de tildes y caracteres mal codificados (mojibake) en Contactos.
 - Modulos:

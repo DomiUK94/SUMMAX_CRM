@@ -277,6 +277,11 @@ export function InvestorsTable({
     getSortedRowModel: getSortedRowModel()
   });
 
+  const manageParams = new URLSearchParams(searchParams.toString());
+  manageParams.delete("page");
+  manageParams.delete("per_page");
+  manageParams.set("return_to", `${pathname}?${searchParams.toString()}`);
+  const manageHref = `/investors/manage?${manageParams.toString()}`;
   const visibleColumnCount = COLUMN_ORDER.filter((key) => table.getColumn(key)?.getIsVisible()).length;
   const noWebCount = quickCounts?.withoutWebCount ?? investors.filter((row) => !hasWebsite(row.website)).length;
   const updated7dCount = quickCounts?.updated7dCount ?? investors.filter((row) => wasUpdatedInDays(row.updated_at, 7)).length;
@@ -368,6 +373,9 @@ export function InvestorsTable({
         >
           <span className="smart-tab-icon" aria-hidden="true"><CrmIcon name="activity" className="crm-icon" /></span><span>Actualizadas 7 días</span> <span className="contacts-badge">{updated7dCount}</span>
         </button>
+        <Link href={manageHref} className="bulk-manage-trigger">
+          Modificacion multiple
+        </Link>
       </div>
 
       <DataTable

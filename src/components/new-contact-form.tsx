@@ -139,9 +139,9 @@ export function NewContactForm({
             </label>
             <label className="form-field">
               <span>Es financiador</span>
-              <select name="is_financier" defaultValue="no">
-                <option value="no">No</option>
+              <select name="is_financier" defaultValue="yes">
                 <option value="yes">Si</option>
+                <option value="no">No</option>
               </select>
             </label>
             <label className="form-field">

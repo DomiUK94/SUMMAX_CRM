@@ -128,6 +128,7 @@ export async function AppShell({
       defaultOpen: false,
       items: [
         { href: "/dashboard/general", label: "General", icon: "overview", visible: canViewGlobal },
+        { href: "/dashboard/vision-360", label: "Visión 360", icon: "spark", visible: canViewGlobal },
         { href: "/dashboard/web", label: "Web", icon: "overview", visible: canViewGlobal },
         { href: "/reporte-financiacion", label: "Financiaci\u00f3n", icon: "report", visible: canViewGlobal }
       ]

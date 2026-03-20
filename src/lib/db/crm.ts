@@ -738,7 +738,7 @@ export async function createContact(input: ContactInput) {
       otro_contacto: safeOtherContact,
       linkedin: safeLinkedin,
       comentarios: safeComments,
-      es_financiador: input.is_financier ?? false,
+      es_financiador: input.is_financier ?? true,
       es_preescriptor: input.is_prescriber ?? false,
       owner_user_id: input.owner_user_id ?? null,
       owner_email: input.owner_email ?? null

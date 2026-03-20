@@ -10,6 +10,18 @@ type InlinePayload = {
   value?: string | null;
 };
 
+function missingOwnerColumnsMessage() {
+  return "Falta aplicar la migracion de propietarios en sourcecrm.contactos (20260218_phase6_sourcecrm_contact_owner.sql)";
+}
+
+function hasMissingOwnerColumns(error: { code?: string; message?: string } | null | undefined) {
+  const message = String(error?.message ?? "");
+  return (
+    (error?.code === "PGRST204" || error?.code === "42703") &&
+    (message.includes("owner_user_id") || message.includes("owner_email"))
+  );
+}
+
 export async function PATCH(request: Request, context: { params: { id: string } }) {
   const user = await getCurrentUser();
   if (!user || !canWriteCrm(user)) return NextResponse.json({ error: "No autorizado" }, { status: 403 });
@@ -21,11 +33,23 @@ export async function PATCH(request: Request, context: { params: { id: string } 
   if (!field) return NextResponse.json({ error: "Campo requerido" }, { status: 400 });
 
   const db = createSourceCrmServerClient();
-  const { data: current, error: currentError } = await db
+  let { data: current, error: currentError } = await db
     .from("contactos")
     .select("contact_id, owner_user_id, owner_email, comentarios, email, telefono")
     .eq("contact_id", contactId)
     .maybeSingle();
+  if (hasMissingOwnerColumns(currentError)) {
+    if (field === "owner_user_id") {
+      return NextResponse.json({ error: missingOwnerColumnsMessage() }, { status: 500 });
+    }
+    const fallback = await db
+      .from("contactos")
+      .select("contact_id, comentarios, email, telefono")
+      .eq("contact_id", contactId)
+      .maybeSingle();
+    current = fallback.data ? { ...fallback.data, owner_user_id: null, owner_email: null } : null;
+    currentError = fallback.error;
+  }
   if (currentError) return NextResponse.json({ error: currentError.message }, { status: 500 });
   if (!current) return NextResponse.json({ error: "Contacto no encontrado" }, { status: 404 });
 
@@ -74,6 +98,9 @@ export async function PATCH(request: Request, context: { params: { id: string } 
   }
 
   const { error } = await db.from("contactos").update(patch).eq("contact_id", contactId);
+  if (hasMissingOwnerColumns(error)) {
+    return NextResponse.json({ error: missingOwnerColumnsMessage() }, { status: 500 });
+  }
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   await writeAuditEntry({

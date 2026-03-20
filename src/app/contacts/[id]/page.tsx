@@ -173,7 +173,8 @@ export default async function ContactDetailPage({ params, searchParams }: PagePr
     { label: "Nota", icon: "report" as const, href: `/contacts/${encodeURIComponent(params.id)}?tab=activities#contact-notes` },
     { label: "LinkedIn", icon: "linkedin" as const, href: contact.linkedin ? contact.linkedin : undefined },
     { label: "Tarea", icon: "task" as const, href: `/actividades?section=new&contact_id=${encodeURIComponent(params.id)}` },
-    { label: "Compañia", icon: "companies" as const, href: contact.investor_id ? `/investors/${encodeURIComponent(contact.investor_id)}` : undefined }
+    { label: "Compañia", icon: "companies" as const, href: contact.investor_id ? `/investors/${encodeURIComponent(contact.investor_id)}` : undefined },
+    { label: "Visión 360", icon: "spark" as const, href: `/dashboard/vision-360/contactos/${encodeURIComponent(params.id)}` }
   ];
 
   const relatedCompanies = contact.investor_name

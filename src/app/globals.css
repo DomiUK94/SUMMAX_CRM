@@ -2724,7 +2724,8 @@ textarea:disabled {
 .quick-pill-ghost,
 .entity-toolbar-trigger,
 .entity-toolbar-menu summary,
-.bulk-assign-trigger {
+.bulk-assign-trigger,
+.bulk-manage-trigger {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2747,6 +2748,17 @@ textarea:disabled {
   border: 1px solid rgba(128, 157, 180, 0.34);
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.96) 0%, rgba(244, 249, 255, 0.92) 100%);
   color: #17324a;
+}
+
+.bulk-manage-trigger {
+  border: 1px solid rgba(212, 160, 23, 0.48);
+  background: linear-gradient(180deg, rgba(255, 249, 219, 0.98) 0%, rgba(253, 243, 187, 0.96) 100%);
+  color: #9a6a00;
+}
+
+.bulk-manage-trigger:disabled {
+  opacity: 0.62;
+  cursor: not-allowed;
 }
 
 .contacts-tab-active,
@@ -4131,6 +4143,24 @@ button[type="submit"] {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   cursor: pointer;
+  outline: none;
+  box-shadow: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.business-sort-trigger:hover,
+.business-sort-trigger:focus,
+.business-sort-trigger:focus-visible,
+.business-sort-trigger:active {
+  transform: none;
+  border-color: transparent;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+}
+
+.business-sort-trigger::-moz-focus-inner {
+  border: 0;
 }
 
 .business-sort-indicator {
@@ -6503,4 +6533,354 @@ button.contact-record-action-pill {
   display: block;
   width: 100%;
   height: auto;
+}
+
+.dashboard-360-landing-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.dashboard-360-landing-card,
+.dashboard-360-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dashboard-360-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dashboard-360-section-head h3,
+.dashboard-360-hero h2 {
+  margin: 0;
+}
+
+.dashboard-360-search-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.dashboard-360-landing-list,
+.dashboard-360-doc-list,
+.dashboard-360-decision-list,
+.dashboard-360-relationship-list,
+.dashboard-360-pipeline-list,
+.dashboard-360-timeline,
+.dashboard-360-compact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dashboard-360-landing-item,
+.dashboard-360-relationship-card,
+.dashboard-360-pipeline-card,
+.dashboard-360-action-pill {
+  text-decoration: none;
+}
+
+.dashboard-360-landing-item,
+.dashboard-360-relationship-card,
+.dashboard-360-pipeline-card,
+.dashboard-360-doc-card,
+.dashboard-360-decision-card,
+.dashboard-360-timeline-item,
+.dashboard-360-compact-item,
+.dashboard-360-info-card,
+.dashboard-360-metric-card {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(244, 249, 255, 0.9) 100%);
+}
+
+.dashboard-360-landing-item,
+.dashboard-360-relationship-card,
+.dashboard-360-pipeline-card,
+.dashboard-360-doc-card,
+.dashboard-360-decision-card,
+.dashboard-360-timeline-item {
+  padding: 14px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dashboard-360-landing-item strong,
+.dashboard-360-relationship-card strong,
+.dashboard-360-pipeline-card strong,
+.dashboard-360-doc-card strong,
+.dashboard-360-decision-card strong,
+.dashboard-360-timeline-item strong {
+  font-size: 15px;
+}
+
+.dashboard-360-landing-item span,
+.dashboard-360-relationship-card span,
+.dashboard-360-pipeline-card span,
+.dashboard-360-doc-card span,
+.dashboard-360-decision-card span,
+.dashboard-360-timeline-item span {
+  color: var(--text-muted);
+}
+
+.dashboard-360-shell {
+  gap: 18px;
+}
+
+.dashboard-360-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(300px, 0.9fr);
+  gap: 18px;
+  align-items: start;
+  background:
+    radial-gradient(circle at top right, rgba(15, 154, 133, 0.14), transparent 28%),
+    radial-gradient(circle at bottom left, rgba(239, 124, 54, 0.12), transparent 22%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.97) 0%, rgba(247, 251, 255, 0.9) 100%);
+}
+
+.dashboard-360-hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dashboard-360-hero-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dashboard-360-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dashboard-360-chip,
+.dashboard-360-meta-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dashboard-360-chip {
+  background: rgba(15, 154, 133, 0.12);
+  color: #0b7666;
+  border: 1px solid rgba(15, 154, 133, 0.22);
+}
+
+.dashboard-360-meta-pill {
+  background: rgba(17, 34, 51, 0.04);
+  border: 1px solid rgba(17, 34, 51, 0.08);
+}
+
+.dashboard-360-relation-link {
+  display: inline-flex;
+  width: fit-content;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(239, 124, 54, 0.12);
+  border: 1px solid rgba(239, 124, 54, 0.22);
+  color: #ad5821;
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.dashboard-360-relation-link-static {
+  cursor: default;
+}
+
+.dashboard-360-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dashboard-360-metric-card {
+  padding: 14px 12px;
+  display: grid;
+  gap: 6px;
+}
+
+.dashboard-360-metric-card span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.dashboard-360-metric-card strong {
+  font-size: 24px;
+}
+
+.dashboard-360-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dashboard-360-action-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(17, 34, 51, 0.1);
+  background: rgba(255, 255, 255, 0.82);
+  font-weight: 700;
+}
+
+.dashboard-360-action-pill-disabled {
+  opacity: 0.48;
+  pointer-events: none;
+}
+
+.dashboard-360-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(300px, 0.8fr);
+  gap: 18px;
+}
+
+.dashboard-360-main,
+.dashboard-360-side {
+  min-width: 0;
+}
+
+.dashboard-360-next-action p,
+.dashboard-360-next-action small {
+  margin: 0;
+}
+
+.dashboard-360-next-action-focus {
+  border-color: rgba(15, 154, 133, 0.3);
+  background: linear-gradient(180deg, rgba(15, 154, 133, 0.08) 0%, rgba(255, 255, 255, 0.98) 100%);
+}
+
+.dashboard-360-next-action-scheduled {
+  border-color: rgba(239, 124, 54, 0.3);
+  background: linear-gradient(180deg, rgba(239, 124, 54, 0.08) 0%, rgba(255, 255, 255, 0.98) 100%);
+}
+
+.dashboard-360-next-action-missing {
+  border-color: rgba(196, 61, 47, 0.32);
+  background: linear-gradient(180deg, rgba(196, 61, 47, 0.08) 0%, rgba(255, 255, 255, 0.98) 100%);
+}
+
+.dashboard-360-knowledge-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dashboard-360-info-card {
+  padding: 14px;
+  display: grid;
+  gap: 6px;
+}
+
+.dashboard-360-info-card span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.dashboard-360-info-card strong,
+.dashboard-360-info-card a {
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.dashboard-360-pipeline-head,
+.dashboard-360-timeline-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 12px;
+}
+
+.dashboard-360-kind {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.dashboard-360-kind-lead {
+  background: rgba(15, 154, 133, 0.12);
+  color: #0b7666;
+}
+
+.dashboard-360-kind-opportunity {
+  background: rgba(239, 124, 54, 0.14);
+  color: #ad5821;
+}
+
+.dashboard-360-timeline-head div {
+  display: grid;
+  gap: 4px;
+}
+
+.dashboard-360-timeline-item p,
+.dashboard-360-decision-card p {
+  margin: 0;
+}
+
+.dashboard-360-inline-link {
+  width: fit-content;
+  color: #0b7666;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.dashboard-360-compact-item {
+  padding: 14px;
+  display: grid;
+  gap: 6px;
+}
+
+.dashboard-360-compact-item span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.dashboard-360-relationship-card-static {
+  cursor: default;
+}
+
+@media (max-width: 1180px) {
+  .dashboard-360-hero,
+  .dashboard-360-grid,
+  .dashboard-360-landing-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboard-360-search-form,
+  .dashboard-360-actions-grid,
+  .dashboard-360-metrics-grid,
+  .dashboard-360-knowledge-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-360-pipeline-head,
+  .dashboard-360-timeline-head {
+    flex-direction: column;
+  }
 }

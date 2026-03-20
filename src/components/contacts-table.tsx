@@ -10,7 +10,6 @@ import {
   getCoreRowModel,
   getSortedRowModel,
   type ColumnDef,
-  type RowSelectionState,
   type SortingState,
   type VisibilityState,
   useReactTable
@@ -150,15 +149,11 @@ export function ContactsTable({
     [searchParams]
   );
   const [columnFiltersDraft, setColumnFiltersDraft] = useState<ContactColumnFilterState>(appliedColumnFilters);
-  const [ownerToAssign, setOwnerToAssign] = useState("");
-  const [assigning, setAssigning] = useState(false);
-  const [bulkAssignOpen, setBulkAssignOpen] = useState(false);
   const [inlineBusyKey, setInlineBusyKey] = useState<string | null>(null);
   const [assignError, setAssignError] = useState<string | null>(null);
   const [viewMode, setViewMode] = usePersistedState<ContactsViewMode>(`${prefix}:view_mode`, "table");
   const [quickFilter, setQuickFilter] = usePersistedState<ContactsQuickFilter>(`${prefix}:quick_filter`, "all");
   const { columnVisibility, setColumnVisibility } = useUserColumnVisibility("contacts", `${prefix}:columns`, DEFAULT_COLUMNS);
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [sorting, setSorting] = useState<SortingState>([]);
   const [quickViewContact, setQuickViewContact] = useState<ListedContact | null>(null);
   const [phonePreviewOpen, setPhonePreviewOpen] = useState(false);
@@ -199,36 +194,6 @@ export function ContactsTable({
     if (quickFilter === "critical") return searched.filter((contact) => daysWithoutAction(contact.updated_at) > 14);
     return searched;
   }, [appliedColumnFilters, contacts, quickFilter]);
-
-  async function assignOwnerBulk() {
-    const selectedIds = table.getSelectedRowModel().rows.map((row) => row.original.id);
-    if (!ownerToAssign || selectedIds.length === 0 || assigning) return;
-
-    setAssignError(null);
-    setAssigning(true);
-    try {
-      const res = await fetch("/api/contacts/assign-owner", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contactIds: selectedIds, ownerUserId: ownerToAssign })
-      });
-      if (!res.ok) {
-        const payload = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(payload?.error ?? "No se pudo asignar propietario");
-      }
-      setOwnerToAssign("");
-      setRowSelection({});
-      setBulkAssignOpen(false);
-      showToast("Propietario actualizado en la seleccion.", "success");
-      router.refresh();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Error inesperado";
-      setAssignError(message);
-      showToast(message, "error");
-    } finally {
-      setAssigning(false);
-    }
-  }
 
   async function updateInline(contactId: string, field: "owner_user_id" | "email" | "telefono", value: string) {
     const key = `${contactId}:${field}`;
@@ -282,29 +247,6 @@ export function ContactsTable({
 
   const columns = useMemo<ColumnDef<ListedContact>[]>(
     () => [
-      {
-        id: "select",
-        enableHiding: false,
-        header: ({ table }) => (
-          <input
-            type="checkbox"
-            checked={table.getIsAllRowsSelected()}
-            ref={(input) => {
-              if (input) input.indeterminate = table.getIsSomeRowsSelected() && !table.getIsAllRowsSelected();
-            }}
-            onChange={table.getToggleAllRowsSelectedHandler()}
-            aria-label="Seleccionar visibles"
-          />
-        ),
-        cell: ({ row }) => (
-          <input
-            type="checkbox"
-            checked={row.getIsSelected()}
-            onChange={row.getToggleSelectedHandler()}
-            aria-label={`Seleccionar ${row.original.full_name}`}
-          />
-        )
-      },
       {
         accessorKey: "id",
         id: "id",
@@ -462,19 +404,19 @@ export function ContactsTable({
     columns,
     state: {
       columnVisibility,
-      rowSelection,
       sorting
     },
-    getRowId: (row) => row.id,
-    enableRowSelection: true,
     onColumnVisibilityChange: setColumnVisibility,
-    onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel()
   });
 
-  const selectedCount = table.getSelectedRowModel().rows.length;
+  const manageParams = new URLSearchParams(searchParams.toString());
+  manageParams.delete("page");
+  manageParams.delete("per_page");
+  manageParams.set("return_to", `${pathname}?${searchParams.toString()}`);
+  const manageHref = `/contacts/manage?${manageParams.toString()}`;
   const visibleDataColumnCount = DATA_COLUMN_ORDER.filter((key) => table.getColumn(key)?.getIsVisible()).length;
   const timelineRows = table.getRowModel().rows;
   const needsActionCount = quickCounts?.needsActionCount ?? contacts.filter((contact) => daysWithoutAction(contact.updated_at) > 7).length;
@@ -561,64 +503,11 @@ export function ContactsTable({
           </button>
         </div>
 
-        {(inlineBusyKey || assigning) ? <span className="entity-feedback-chip">Guardando cambios...</span> : null}
+        {inlineBusyKey ? <span className="entity-feedback-chip">Guardando cambios...</span> : null}
 
-        <Dialog.Root open={bulkAssignOpen} onOpenChange={setBulkAssignOpen}>
-          <Dialog.Trigger asChild>
-            <button type="button" className="bulk-assign-trigger">
-              Asignacion multiple
-            </button>
-          </Dialog.Trigger>
-          <Dialog.Portal>
-            <Dialog.Overlay className="radix-dialog-overlay" />
-            <Dialog.Content className="radix-dialog-content">
-              <div className="radix-dialog-head">
-                <div>
-                  <Dialog.Title>Asignar propietarios</Dialog.Title>
-                  <Dialog.Description>
-                    {selectedCount > 0
-                      ? `Se aplicara a ${selectedCount} contacto${selectedCount === 1 ? "" : "s"} seleccionados.`
-                      : "Selecciona una o mas filas en la tabla para habilitar la asignacion."}
-                  </Dialog.Description>
-                </div>
-                <Dialog.Close asChild>
-                    <button type="button" className="radix-dialog-close" aria-label="Cerrar">
-                      <CrmIcon name="close" className="crm-icon" />
-                    </button>
-                  </Dialog.Close>
-              </div>
-
-              <div className="stack" style={{ gap: 14 }}>
-                <label className="stack" style={{ gap: 8 }}>
-                  <span>Propietario</span>
-                  <select value={ownerToAssign} onChange={(event) => setOwnerToAssign(event.target.value)}>
-                    <option value="">Elegir propietario...</option>
-                    {owners.map((owner) => (
-                      <option key={owner.id} value={owner.id}>
-                        {owner.full_name?.trim() || owner.email}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="bulk-owner-bar">
-                  <span>{selectedCount} seleccionados</span>
-                  {assignError ? <span className="bulk-owner-error">{assignError}</span> : null}
-                </div>
-              </div>
-
-              <div className="radix-dialog-actions">
-                <Dialog.Close asChild>
-                  <button type="button" className="quick-pill quick-pill-ghost">
-                    Cancelar
-                  </button>
-                </Dialog.Close>
-                <button onClick={assignOwnerBulk} disabled={!ownerToAssign || selectedCount === 0 || assigning}>
-                  {assigning ? "Asignando..." : "Confirmar asignacion"}
-                </button>
-              </div>
-            </Dialog.Content>
-          </Dialog.Portal>
-        </Dialog.Root>
+        <Link href={manageHref} className="bulk-manage-trigger">
+          Modificacion multiple
+        </Link>
       </div>
 
       {viewMode === "timeline" ? (
@@ -649,7 +538,6 @@ export function ContactsTable({
           <DataTable
             table={table}
             headerFilters={{
-              select: null,
               id: <input value={columnFiltersDraft.id ?? ""} onChange={(event) => updateColumnFilter("id", event.target.value)} placeholder="Filtrar" />,
               full_name: <input value={columnFiltersDraft.full_name ?? ""} onChange={(event) => updateColumnFilter("full_name", event.target.value)} placeholder="Filtrar" />,
               investor_name: <input value={columnFiltersDraft.investor_name ?? ""} onChange={(event) => updateColumnFilter("investor_name", event.target.value)} placeholder="Filtrar" />,
@@ -686,9 +574,9 @@ export function ContactsTable({
                     <Dialog.Description>{quickViewContact.investor_name ?? "Sin compania asociada"}</Dialog.Description>
                   </div>
                   <Dialog.Close asChild>
-                    <button type="button" className="radix-dialog-close" aria-label="Cerrar">
-                    <CrmIcon name="close" className="crm-icon" />
-                  </button>
+                    <button type="button" className="radix-dialog-close" aria-label="Cerrar" onClick={() => setQuickViewContact(null)}>
+                      <CrmIcon name="close" className="crm-icon" />
+                    </button>
                   </Dialog.Close>
                 </div>
 
@@ -778,9 +666,7 @@ export function ContactsTable({
                 </div>
 
                 <div className="radix-dialog-actions">
-                  <Dialog.Close asChild>
-                    <button type="button" className="quick-pill quick-pill-ghost">Cerrar</button>
-                  </Dialog.Close>
+                  <button type="button" className="quick-pill quick-pill-ghost" onClick={() => setQuickViewContact(null)}>Cerrar</button>
                   <Link href={`/contacts/${encodeURIComponent(quickViewContact.id)}`} className="contacts-add">
                     <span className="module-tab-icon" aria-hidden="true"><CrmIcon name="report" className="crm-icon" /></span>
                     <span>Abrir ficha completa</span>

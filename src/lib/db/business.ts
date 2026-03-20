@@ -87,7 +87,10 @@ export type BusinessTimelineItem = {
   title: string;
   type: string;
   occurredAt: string;
+  occurredAtRaw: string;
   body: string;
+  href: string;
+  eventType: string;
 };
 
 function shortId(value: string) {
@@ -158,7 +161,13 @@ function mapTimelineItems(rows: PipelineEventRow[], lookups: Awaited<ReturnType<
       }),
       type: row.entity_type === "lead" ? "Lead" : "Opportunity",
       occurredAt: new Date(row.occurred_at).toLocaleString("es-ES"),
-      body: row.notes ?? row.actor_email ?? "--"
+      occurredAtRaw: row.occurred_at,
+      body: row.notes ?? row.actor_email ?? "--",
+      href:
+        row.entity_type === "lead"
+          ? `/acuerdos/leads/${encodeURIComponent(String(row.lead_id ?? ""))}`
+          : `/acuerdos/opportunities/${encodeURIComponent(String(row.opportunity_id ?? ""))}`,
+      eventType: row.event_type
     } satisfies BusinessTimelineItem;
   });
 }
