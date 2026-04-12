@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
+import { ensureCrmProfileForAuthUser } from "@/lib/auth/profile-sync";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 import type { AppUser, AppRole } from "@/lib/auth/permissions";
 
 export async function getCurrentUser(): Promise<AppUser | null> {
@@ -11,13 +11,7 @@ export async function getCurrentUser(): Promise<AppUser | null> {
 
   if (!user) return null;
 
-  const sourcecrm = createSourceCrmServerClient();
-  const { data: profile } = await sourcecrm
-    .from("users")
-    .select("id, email, role, can_view_global_dashboard, is_active")
-    .eq("id", user.id)
-    .maybeSingle();
-
+  const profile = await ensureCrmProfileForAuthUser(user);
   if (!profile) return null;
 
   return {

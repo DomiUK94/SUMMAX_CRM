@@ -1,8 +1,9 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
+import { ensureCrmProfileForAuthUser } from "@/lib/auth/profile-sync";
 import { sanitizeRedirectPath } from "@/lib/security/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
+import { createSourceCrmAdminClient } from "@/lib/supabase/sourcecrm-admin";
 
 type SearchProps = {
   searchParams?: {
@@ -30,21 +31,17 @@ export default function LoginPage({ searchParams }: SearchProps) {
     const next = sanitizeRedirectPath(String(formData.get("next") ?? "/dashboard/me"));
 
     const supabase = createSupabaseServerClient();
-    const sourcecrm = createSourceCrmServerClient();
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error || !data.user) {
       redirect("/login?error=invalid_credentials");
     }
 
-    const { data: profile, error: readProfileError } = await sourcecrm
-      .from("users")
-      .select("id, is_active")
-      .eq("id", data.user.id)
-      .maybeSingle();
-
-    if (readProfileError) {
+    let profile;
+    try {
+      profile = await ensureCrmProfileForAuthUser(data.user);
+    } catch (profileError) {
       await supabase.auth.signOut();
-      const reason = encodeURIComponent(readProfileError.message || "unknown");
+      const reason = encodeURIComponent(profileError instanceof Error ? profileError.message : "unknown");
       redirect(`/login?error=profile_sync_failed&reason=${reason}`);
     }
 
@@ -58,10 +55,12 @@ export default function LoginPage({ searchParams }: SearchProps) {
       redirect("/login?error=forbidden&reason=user_inactive");
     }
 
+    const sourcecrm = createSourceCrmAdminClient();
     const updateResult = await sourcecrm
       .from("users")
       .update({
         email: data.user.email ?? email,
+        full_name: typeof data.user.user_metadata?.full_name === "string" ? data.user.user_metadata.full_name.trim() || null : undefined,
         updated_at: new Date().toISOString()
       })
       .eq("id", data.user.id);
