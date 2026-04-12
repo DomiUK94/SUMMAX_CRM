@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { ensureCrmProfileForAuthUser } from "@/lib/auth/profile-sync";
+import { ensureCrmProfileForAuthUser, findVisibleCrmProfileForCurrentSession } from "@/lib/auth/profile-sync";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { AppUser, AppRole } from "@/lib/auth/permissions";
 
@@ -11,7 +11,10 @@ export async function getCurrentUser(): Promise<AppUser | null> {
 
   if (!user) return null;
 
-  const profile = await ensureCrmProfileForAuthUser(user);
+  let profile = await findVisibleCrmProfileForCurrentSession(user.id);
+  if (!profile) {
+    profile = await ensureCrmProfileForAuthUser(user);
+  }
   if (!profile) return null;
 
   return {

@@ -2,6 +2,7 @@ import type { User } from "@supabase/supabase-js";
 import type { AppRole } from "@/lib/auth/permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSourceCrmAdminClient } from "@/lib/supabase/sourcecrm-admin";
+import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
 type CrmProfile = {
   id: string;
@@ -51,6 +52,18 @@ function mapProfile(profile: {
     can_view_global_dashboard: profile.can_view_global_dashboard,
     is_active: profile.is_active
   };
+}
+
+export async function findVisibleCrmProfileForCurrentSession(authUserId: string): Promise<CrmProfile | null> {
+  const sourcecrm = createSourceCrmServerClient();
+  const result = await sourcecrm
+    .from("users")
+    .select("id, email, full_name, role, can_view_global_dashboard, is_active")
+    .eq("id", authUserId)
+    .maybeSingle();
+
+  if (result.error) throw result.error;
+  return result.data?.email ? mapProfile(result.data) : null;
 }
 
 async function findLegacyProfile(authUser: Pick<User, "id" | "email">): Promise<LegacyProfile | null> {

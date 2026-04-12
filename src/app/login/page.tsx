@@ -1,9 +1,9 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { ensureCrmProfileForAuthUser } from "@/lib/auth/profile-sync";
+import { ensureCrmProfileForAuthUser, findVisibleCrmProfileForCurrentSession } from "@/lib/auth/profile-sync";
 import { sanitizeRedirectPath } from "@/lib/security/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createSourceCrmAdminClient } from "@/lib/supabase/sourcecrm-admin";
+import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
 
 type SearchProps = {
   searchParams?: {
@@ -47,7 +47,10 @@ export default function LoginPage({ searchParams }: SearchProps) {
 
     let profile;
     try {
-      profile = await ensureCrmProfileForAuthUser(data.user);
+      profile = await findVisibleCrmProfileForCurrentSession(data.user.id);
+      if (!profile) {
+        profile = await ensureCrmProfileForAuthUser(data.user);
+      }
     } catch (profileError) {
       await supabase.auth.signOut();
       const reason = encodeURIComponent(getErrorMessage(profileError));
@@ -64,7 +67,7 @@ export default function LoginPage({ searchParams }: SearchProps) {
       redirect("/login?error=forbidden&reason=user_inactive");
     }
 
-    const sourcecrm = createSourceCrmAdminClient();
+    const sourcecrm = createSourceCrmServerClient();
     const updateResult = await sourcecrm
       .from("users")
       .update({
