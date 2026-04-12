@@ -21,6 +21,15 @@ type LegacyProfile = {
   is_active: boolean;
 };
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string") {
+    return error.message;
+  }
+  if (typeof error === "string" && error.trim()) return error;
+  return "Unknown profile sync error";
+}
+
 function normalizeRole(value: string | null | undefined): AppRole {
   if (value === "admin" || value === "manager") return value;
   return "user";
@@ -68,41 +77,61 @@ async function findLegacyProfile(authUser: Pick<User, "id" | "email">): Promise<
 }
 
 export async function ensureCrmProfileForAuthUser(authUser: Pick<User, "id" | "email" | "user_metadata">): Promise<CrmProfile | null> {
-  const sourcecrm = createSourceCrmAdminClient();
-  const existing = await sourcecrm
-    .from("users")
-    .select("id, email, full_name, role, can_view_global_dashboard, is_active")
-    .eq("id", authUser.id)
-    .maybeSingle();
+  try {
+    const sourcecrm = createSourceCrmAdminClient();
+    const existing = await sourcecrm
+      .from("users")
+      .select("id, email, full_name, role, can_view_global_dashboard, is_active")
+      .eq("id", authUser.id)
+      .maybeSingle();
 
-  if (existing.error) throw existing.error;
-  if (existing.data?.email) return mapProfile(existing.data);
+    if (existing.error) throw existing.error;
+    if (existing.data?.email) return mapProfile(existing.data);
 
-  const legacyProfile = await findLegacyProfile(authUser);
-  if (!legacyProfile) return null;
+    if (authUser.email) {
+      const existingByEmail = await sourcecrm
+        .from("users")
+        .select("id, email, full_name, role, can_view_global_dashboard, is_active")
+        .eq("email", authUser.email)
+        .maybeSingle();
 
-  const fullName =
-    typeof authUser.user_metadata?.full_name === "string" && authUser.user_metadata.full_name.trim()
-      ? authUser.user_metadata.full_name.trim()
-      : legacyProfile.full_name;
+      if (existingByEmail.error) throw existingByEmail.error;
+      if (existingByEmail.data?.id && existingByEmail.data.id !== authUser.id) {
+        throw new Error(
+          "Existe un perfil CRM con este email vinculado a otro usuario Auth. Hay que relinkar el perfil desde administracion."
+        );
+      }
+      if (existingByEmail.data?.email) return mapProfile(existingByEmail.data);
+    }
 
-  const restored = await sourcecrm
-    .from("users")
-    .upsert(
-      {
-        id: authUser.id,
-        email: authUser.email ?? legacyProfile.email,
-        full_name: fullName || null,
-        role: normalizeRole(legacyProfile.role),
-        can_view_global_dashboard: Boolean(legacyProfile.can_view_global_dashboard),
-        is_active: Boolean(legacyProfile.is_active),
-        updated_at: new Date().toISOString()
-      },
-      { onConflict: "id" }
-    )
-    .select("id, email, full_name, role, can_view_global_dashboard, is_active")
-    .single();
+    const legacyProfile = await findLegacyProfile(authUser);
+    if (!legacyProfile) return null;
 
-  if (restored.error) throw restored.error;
-  return mapProfile(restored.data);
+    const fullName =
+      typeof authUser.user_metadata?.full_name === "string" && authUser.user_metadata.full_name.trim()
+        ? authUser.user_metadata.full_name.trim()
+        : legacyProfile.full_name;
+
+    const restored = await sourcecrm
+      .from("users")
+      .upsert(
+        {
+          id: authUser.id,
+          email: authUser.email ?? legacyProfile.email,
+          full_name: fullName || null,
+          role: normalizeRole(legacyProfile.role),
+          can_view_global_dashboard: Boolean(legacyProfile.can_view_global_dashboard),
+          is_active: Boolean(legacyProfile.is_active),
+          updated_at: new Date().toISOString()
+        },
+        { onConflict: "id" }
+      )
+      .select("id, email, full_name, role, can_view_global_dashboard, is_active")
+      .single();
+
+    if (restored.error) throw restored.error;
+    return mapProfile(restored.data);
+  } catch (error) {
+    throw new Error(getErrorMessage(error));
+  }
 }

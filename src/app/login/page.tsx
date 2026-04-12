@@ -22,6 +22,15 @@ function formatError(error?: string, reason?: string) {
   return `Error: ${error}${reason ? ` (${reason})` : ""}`;
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string") {
+    return error.message;
+  }
+  if (typeof error === "string" && error.trim()) return error;
+  return "Unknown profile sync error";
+}
+
 export default function LoginPage({ searchParams }: SearchProps) {
   async function login(formData: FormData) {
     "use server";
@@ -41,7 +50,7 @@ export default function LoginPage({ searchParams }: SearchProps) {
       profile = await ensureCrmProfileForAuthUser(data.user);
     } catch (profileError) {
       await supabase.auth.signOut();
-      const reason = encodeURIComponent(profileError instanceof Error ? profileError.message : "unknown");
+      const reason = encodeURIComponent(getErrorMessage(profileError));
       redirect(`/login?error=profile_sync_failed&reason=${reason}`);
     }
 
