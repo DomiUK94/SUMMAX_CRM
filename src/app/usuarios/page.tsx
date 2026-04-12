@@ -14,6 +14,42 @@ type SearchProps = {
   };
 };
 
+type AuthUserOption = {
+  id: string;
+  email: string;
+  full_name: string | null;
+};
+
+async function listAuthUsers() {
+  const supabase = createSupabaseAdminClient();
+  const users: AuthUserOption[] = [];
+  let page = 1;
+
+  while (page <= 10) {
+    const result = await supabase.auth.admin.listUsers({ page, perPage: 200 });
+    if (result.error) throw result.error;
+
+    const authPageUsers = result.data.users ?? [];
+    const pageUsers = authPageUsers
+      .filter((user) => user.id && user.email)
+      .map((user) => ({
+        id: user.id,
+        email: user.email as string,
+        full_name: typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : null
+      }));
+
+    users.push(...pageUsers);
+
+    if (authPageUsers.length < 200) {
+      break;
+    }
+
+    page += 1;
+  }
+
+  return users;
+}
+
 export default async function UsuariosPage({ searchParams }: SearchProps) {
   const user = await requireUser();
   const isAdmin = canManageUsers(user);
@@ -111,7 +147,7 @@ export default async function UsuariosPage({ searchParams }: SearchProps) {
     const actor = await requireUser();
     if (!canAccessUsersProvisioning(actor)) return;
 
-    const publicUserId = String(formData.get("public_user_id") ?? "").trim();
+    const authUserId = String(formData.get("auth_user_id") ?? "").trim();
     const requestedRole = String(formData.get("role") ?? "user");
     const requestedCanViewGlobal = String(formData.get("can_view_global_dashboard") ?? "false") === "true";
     const requestedIsActive = String(formData.get("is_active") ?? "true") === "true";
@@ -119,26 +155,24 @@ export default async function UsuariosPage({ searchParams }: SearchProps) {
     const role = actorIsAdmin && (requestedRole === "admin" || requestedRole === "manager") ? requestedRole : "user";
     const canViewGlobal = actorIsAdmin ? requestedCanViewGlobal : false;
     const isActive = actorIsAdmin ? requestedIsActive : true;
-    if (!publicUserId) {
-      redirect("/usuarios?error=public_user_required");
+    if (!authUserId) {
+      redirect("/usuarios?error=auth_user_required");
     }
 
     const supabase = createSupabaseAdminClient();
-    const { data: publicUser, error: publicUserError } = await supabase
-      .from("users")
-      .select("id, email, full_name")
-      .eq("id", publicUserId)
-      .maybeSingle();
-    if (publicUserError || !publicUser?.email) {
-      redirect(`/usuarios?error=${encodeURIComponent(publicUserError?.message ?? "public_user_not_found")}`);
+    const authLookup = await supabase.auth.admin.getUserById(authUserId);
+    const authUser = authLookup.data.user;
+    const fullName = typeof authUser?.user_metadata?.full_name === "string" ? authUser.user_metadata.full_name : null;
+    if (authLookup.error || !authUser?.id || !authUser.email) {
+      redirect(`/usuarios?error=${encodeURIComponent(authLookup.error?.message ?? "auth_user_not_found")}`);
     }
 
     const db = createSourceCrmAdminClient();
     const profile = await db.from("users").upsert(
       {
-        id: publicUser.id,
-        email: publicUser.email,
-        full_name: publicUser.full_name ?? null,
+        id: authUser.id,
+        email: authUser.email,
+        full_name: fullName,
         role: role === "admin" || role === "manager" ? role : "user",
         can_view_global_dashboard: canViewGlobal,
         is_active: isActive,
@@ -162,16 +196,10 @@ export default async function UsuariosPage({ searchParams }: SearchProps) {
     .order("created_at", { ascending: false })
     .limit(300);
 
-  const supabase = createSupabaseAdminClient();
-  const { data: publicUsers } = await supabase
-    .from("users")
-    .select("id, email, full_name")
-    .order("created_at", { ascending: false })
-    .limit(1000);
+  const authUsers = await listAuthUsers();
   const crmUserIds = new Set((users ?? []).map((u) => u.id));
-  const publicNotInCrm = (publicUsers ?? [])
+  const authUsersNotInCrm = authUsers
     .filter((u) => u.email && !crmUserIds.has(u.id))
-    .map((u) => ({ id: u.id, email: u.email as string, full_name: u.full_name as string | null }))
     .sort((a, b) => a.email.localeCompare(b.email, "es"));
 
   return (
@@ -191,7 +219,7 @@ export default async function UsuariosPage({ searchParams }: SearchProps) {
               <span>usuarios CRM</span>
             </div>
             <div className="editor-hero-metric">
-              <strong>{publicNotInCrm.length}</strong>
+              <strong>{authUsersNotInCrm.length}</strong>
               <span>por incorporar</span>
             </div>
           </div>
@@ -271,15 +299,15 @@ export default async function UsuariosPage({ searchParams }: SearchProps) {
               <div>
                 <p className="workspace-kicker">Usuarios existentes</p>
                 <h3>Agregar usuario existente</h3>
-                <p className="muted">Trae usuarios ya creados en Public Users y dales acceso dentro del CRM.</p>
+                <p className="muted">Trae usuarios ya creados en Supabase Auth y dales acceso dentro del CRM.</p>
               </div>
             </div>
             <form action={linkExistingAuthUserAction} className="editor-stack">
               <label className="form-field">
-                <span>Usuario de Public Users</span>
-                <select name="public_user_id" required>
+                <span>Usuario de Supabase Auth</span>
+                <select name="auth_user_id" required>
                   <option value="">Selecciona un usuario...</option>
-                  {publicNotInCrm.map((u) => (
+                  {authUsersNotInCrm.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.email}{u.full_name ? ` - ${u.full_name}` : ""}
                     </option>
@@ -322,9 +350,9 @@ export default async function UsuariosPage({ searchParams }: SearchProps) {
               )}
 
               <div className="form-actions-bar form-actions-bar-start">
-                <button type="submit" disabled={publicNotInCrm.length === 0}>Agregar desde Public Users</button>
+                <button type="submit" disabled={authUsersNotInCrm.length === 0}>Agregar desde Supabase Auth</button>
               </div>
-              {publicNotInCrm.length === 0 ? <p className="muted">No hay usuarios pendientes de incorporar al CRM.</p> : null}
+              {authUsersNotInCrm.length === 0 ? <p className="muted">No hay usuarios pendientes de incorporar al CRM.</p> : null}
             </form>
           </div>
         </section>
