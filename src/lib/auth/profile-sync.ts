@@ -66,6 +66,25 @@ export async function findVisibleCrmProfileForCurrentSession(authUserId: string)
   return result.data?.email ? mapProfile(result.data) : null;
 }
 
+export async function bootstrapCrmProfileForCurrentSession(): Promise<CrmProfile | null> {
+  const sourcecrm = createSourceCrmServerClient();
+  const result = await sourcecrm.rpc("bootstrap_current_user_profile");
+  if (result.error) throw result.error;
+
+  const profile = result.data as
+    | {
+        id: string;
+        email: string;
+        full_name?: string | null;
+        role: string;
+        can_view_global_dashboard: boolean;
+        is_active: boolean;
+      }
+    | null;
+
+  return profile?.email ? mapProfile(profile) : null;
+}
+
 async function findLegacyProfile(authUser: Pick<User, "id" | "email">): Promise<LegacyProfile | null> {
   const supabase = createSupabaseAdminClient();
   const byId = await supabase

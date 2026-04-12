@@ -1,6 +1,6 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { ensureCrmProfileForAuthUser, findVisibleCrmProfileForCurrentSession } from "@/lib/auth/profile-sync";
+import { bootstrapCrmProfileForCurrentSession, findVisibleCrmProfileForCurrentSession } from "@/lib/auth/profile-sync";
 import { sanitizeRedirectPath } from "@/lib/security/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
@@ -49,7 +49,7 @@ export default function LoginPage({ searchParams }: SearchProps) {
     try {
       profile = await findVisibleCrmProfileForCurrentSession(data.user.id);
       if (!profile) {
-        profile = await ensureCrmProfileForAuthUser(data.user);
+        profile = await bootstrapCrmProfileForCurrentSession();
       }
     } catch (profileError) {
       await supabase.auth.signOut();
