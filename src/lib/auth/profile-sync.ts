@@ -3,6 +3,7 @@ import type { AppRole } from "@/lib/auth/permissions";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSourceCrmAdminClient } from "@/lib/supabase/sourcecrm-admin";
 import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
+import { createSourceCrmUserClient } from "@/lib/supabase/user";
 
 type CrmProfile = {
   id: string;
@@ -66,8 +67,39 @@ export async function findVisibleCrmProfileForCurrentSession(authUserId: string)
   return result.data?.email ? mapProfile(result.data) : null;
 }
 
+export async function findVisibleCrmProfileByAccessToken(authUserId: string, accessToken: string): Promise<CrmProfile | null> {
+  const sourcecrm = createSourceCrmUserClient(accessToken);
+  const result = await sourcecrm
+    .from("users")
+    .select("id, email, full_name, role, can_view_global_dashboard, is_active")
+    .eq("id", authUserId)
+    .maybeSingle();
+
+  if (result.error) throw result.error;
+  return result.data?.email ? mapProfile(result.data) : null;
+}
+
 export async function bootstrapCrmProfileForCurrentSession(): Promise<CrmProfile | null> {
   const sourcecrm = createSourceCrmServerClient();
+  const result = await sourcecrm.rpc("bootstrap_current_user_profile");
+  if (result.error) throw result.error;
+
+  const profile = result.data as
+    | {
+        id: string;
+        email: string;
+        full_name?: string | null;
+        role: string;
+        can_view_global_dashboard: boolean;
+        is_active: boolean;
+      }
+    | null;
+
+  return profile?.email ? mapProfile(profile) : null;
+}
+
+export async function bootstrapCrmProfileByAccessToken(accessToken: string): Promise<CrmProfile | null> {
+  const sourcecrm = createSourceCrmUserClient(accessToken);
   const result = await sourcecrm.rpc("bootstrap_current_user_profile");
   if (result.error) throw result.error;
 

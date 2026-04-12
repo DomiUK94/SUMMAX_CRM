@@ -1,9 +1,9 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
-import { bootstrapCrmProfileForCurrentSession, findVisibleCrmProfileForCurrentSession } from "@/lib/auth/profile-sync";
+import { bootstrapCrmProfileByAccessToken, findVisibleCrmProfileByAccessToken } from "@/lib/auth/profile-sync";
 import { sanitizeRedirectPath } from "@/lib/security/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
+import { createSourceCrmUserClient } from "@/lib/supabase/user";
 
 type SearchProps = {
   searchParams?: {
@@ -44,12 +44,17 @@ export default function LoginPage({ searchParams }: SearchProps) {
     if (error || !data.user) {
       redirect("/login?error=invalid_credentials");
     }
+    const accessToken = data.session?.access_token;
+    if (!accessToken) {
+      await supabase.auth.signOut();
+      redirect("/login?error=profile_sync_failed&reason=missing_access_token");
+    }
 
     let profile;
     try {
-      profile = await findVisibleCrmProfileForCurrentSession(data.user.id);
+      profile = await findVisibleCrmProfileByAccessToken(data.user.id, accessToken);
       if (!profile) {
-        profile = await bootstrapCrmProfileForCurrentSession();
+        profile = await bootstrapCrmProfileByAccessToken(accessToken);
       }
     } catch (profileError) {
       await supabase.auth.signOut();
@@ -67,7 +72,7 @@ export default function LoginPage({ searchParams }: SearchProps) {
       redirect("/login?error=forbidden&reason=user_inactive");
     }
 
-    const sourcecrm = createSourceCrmServerClient();
+    const sourcecrm = createSourceCrmUserClient(accessToken);
     const updateResult = await sourcecrm
       .from("users")
       .update({
