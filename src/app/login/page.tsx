@@ -1,8 +1,9 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
+import { bootstrapCrmProfileByAccessToken, findVisibleCrmProfileByAccessToken } from "@/lib/auth/profile-sync";
 import { sanitizeRedirectPath } from "@/lib/security/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
+import { createSourceCrmUserClient } from "@/lib/supabase/user";
 
 type SearchProps = {
   searchParams?: {
@@ -21,6 +22,15 @@ function formatError(error?: string, reason?: string) {
   return `Error: ${error}${reason ? ` (${reason})` : ""}`;
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "object" && error !== null && "message" in error && typeof error.message === "string") {
+    return error.message;
+  }
+  if (typeof error === "string" && error.trim()) return error;
+  return "Unknown profile sync error";
+}
+
 export default function LoginPage({ searchParams }: SearchProps) {
   async function login(formData: FormData) {
     "use server";
@@ -30,21 +40,25 @@ export default function LoginPage({ searchParams }: SearchProps) {
     const next = sanitizeRedirectPath(String(formData.get("next") ?? "/dashboard/me"));
 
     const supabase = createSupabaseServerClient();
-    const sourcecrm = createSourceCrmServerClient();
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error || !data.user) {
       redirect("/login?error=invalid_credentials");
     }
-
-    const { data: profile, error: readProfileError } = await sourcecrm
-      .from("users")
-      .select("id, is_active")
-      .eq("id", data.user.id)
-      .maybeSingle();
-
-    if (readProfileError) {
+    const accessToken = data.session?.access_token;
+    if (!accessToken) {
       await supabase.auth.signOut();
-      const reason = encodeURIComponent(readProfileError.message || "unknown");
+      redirect("/login?error=profile_sync_failed&reason=missing_access_token");
+    }
+
+    let profile;
+    try {
+      profile = await findVisibleCrmProfileByAccessToken(data.user.id, accessToken);
+      if (!profile) {
+        profile = await bootstrapCrmProfileByAccessToken(accessToken);
+      }
+    } catch (profileError) {
+      await supabase.auth.signOut();
+      const reason = encodeURIComponent(getErrorMessage(profileError));
       redirect(`/login?error=profile_sync_failed&reason=${reason}`);
     }
 
@@ -58,10 +72,12 @@ export default function LoginPage({ searchParams }: SearchProps) {
       redirect("/login?error=forbidden&reason=user_inactive");
     }
 
+    const sourcecrm = createSourceCrmUserClient(accessToken);
     const updateResult = await sourcecrm
       .from("users")
       .update({
         email: data.user.email ?? email,
+        full_name: typeof data.user.user_metadata?.full_name === "string" ? data.user.user_metadata.full_name.trim() || null : undefined,
         updated_at: new Date().toISOString()
       })
       .eq("id", data.user.id);
