@@ -7,7 +7,7 @@
                     "build":  "next build",
                     "start":  "next start",
                     "lint":  "next lint",
-                    "test":  "tsc -p tsconfig.test.json && node .tmp-tests/tests/pipeline-logic.test.js && node .tmp-tests/tests/security.test.js",
+                    "test":  "tsc -p tsconfig.test.json && node .tmp-tests/tests/pipeline-logic.test.js && node .tmp-tests/tests/security.test.js && node .tmp-tests/tests/supabase-clients.test.js",
                     "security:provision-admin":  "node scripts/provision-crm-admin.mjs",
                     "db:delete-task-data":  "node scripts/delete-task-data.mjs",
                     "prod":  "next build \u0026\u0026 next start",

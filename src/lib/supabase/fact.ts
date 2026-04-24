@@ -1,5 +1,5 @@
-import { createSourceCrmServerClient } from "@/lib/supabase/sourcecrm";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export function createFactServerClient() {
-  return createSourceCrmServerClient();
+  return createSupabaseServerClient().schema("fact");
 }
